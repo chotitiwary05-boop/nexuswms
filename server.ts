@@ -1,0 +1,584 @@
+import express from "express";
+import { createServer as createViteServer } from "vite";
+import Database from "better-sqlite3";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const db = new Database("wms.db");
+
+// Initialize Database Schema
+db.exec(`
+  -- Core Infrastructure
+  CREATE TABLE IF NOT EXISTS branches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    address TEXT,
+    total_area REAL,
+    capacity_pallets INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS zones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id INTEGER,
+    name TEXT NOT NULL,
+    type TEXT CHECK(type IN ('DRY', 'COLD', 'HAZARDOUS')),
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    zone_id INTEGER,
+    name TEXT NOT NULL, -- e.g. R1-S2-B3
+    type TEXT CHECK(type IN ('RACK', 'FLOOR')),
+    total_capacity REAL,
+    occupied_capacity REAL DEFAULT 0,
+    FOREIGN KEY (zone_id) REFERENCES zones(id)
+  );
+
+  -- Vendor & Contract Management
+  CREATE TABLE IF NOT EXISTS vendors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    company_name TEXT,
+    email TEXT,
+    phone TEXT,
+    gst_number TEXT,
+    address TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS contracts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id INTEGER,
+    branch_id INTEGER,
+    start_date DATE,
+    end_date DATE,
+    billing_cycle TEXT CHECK(billing_cycle IN ('DAILY', 'WEEKLY', 'MONTHLY')),
+    rate_per_sqft REAL,
+    security_deposit REAL,
+    status TEXT DEFAULT 'ACTIVE',
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id),
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
+  );
+
+  -- Inventory
+  CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+  );
+
+  CREATE TABLE IF NOT EXISTS items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id INTEGER,
+    name TEXT NOT NULL,
+    sku TEXT UNIQUE NOT NULL,
+    description TEXT,
+    category_id INTEGER,
+    unit_type TEXT, -- Piece, Carton, Pallet
+    weight REAL,
+    volume REAL,
+    quantity INTEGER DEFAULT 0,
+    min_stock_level INTEGER DEFAULT 5,
+    location_id INTEGER,
+    price REAL,
+    gst_rate REAL DEFAULT 18.0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id),
+    FOREIGN KEY (category_id) REFERENCES categories(id),
+    FOREIGN KEY (location_id) REFERENCES locations(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL,
+    type TEXT CHECK(type IN ('IN', 'OUT', 'INTERNAL')) NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price REAL,
+    gst_amount REAL,
+    total_amount REAL,
+    reference TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (item_id) REFERENCES items(id)
+  );
+
+  -- Billing & Accounting
+  CREATE TABLE IF NOT EXISTS invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id INTEGER,
+    invoice_number TEXT UNIQUE NOT NULL,
+    date DATE NOT NULL,
+    due_date DATE NOT NULL,
+    total_amount REAL DEFAULT 0,
+    paid_amount REAL DEFAULT 0,
+    status TEXT DEFAULT 'UNPAID' CHECK(status IN ('UNPAID', 'PARTIAL', 'PAID', 'OVERDUE', 'CANCELLED')),
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS invoice_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id INTEGER,
+    description TEXT NOT NULL,
+    amount REAL NOT NULL,
+    type TEXT CHECK(type IN ('SPACE_RENTAL', 'HANDLING', 'INWARD', 'OUTWARD', 'STORAGE', 'ADDITIONAL')),
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id INTEGER,
+    invoice_id INTEGER,
+    amount REAL NOT NULL,
+    date DATE NOT NULL,
+    method TEXT CHECK(method IN ('CASH', 'BANK', 'UPI', 'CHEQUE', 'OTHER')),
+    type TEXT CHECK(type IN ('FULL', 'PARTIAL', 'ADVANCE')),
+    reference TEXT,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id),
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor_id INTEGER,
+    date DATE NOT NULL,
+    description TEXT,
+    reference TEXT,
+    debit REAL DEFAULT 0,
+    credit REAL DEFAULT 0,
+    balance REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS suppliers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    address TEXT,
+    gst_number TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS pricing_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT UNIQUE NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT,
+    description TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// Seed initial data if empty
+const branchCount = db.prepare("SELECT COUNT(*) as count FROM branches").get() as { count: number };
+if (branchCount.count === 0) {
+  // Branches
+  const b1 = db.prepare("INSERT INTO branches (name, address, total_area, capacity_pallets) VALUES (?, ?, ?, ?)").run("Main Hub - Mumbai", "Sector 5, Navi Mumbai", 50000, 2000).lastInsertRowid;
+  const b2 = db.prepare("INSERT INTO branches (name, address, total_area, capacity_pallets) VALUES (?, ?, ?, ?)").run("North Hub - Delhi", "Okhla Phase 3, Delhi", 30000, 1200).lastInsertRowid;
+
+  // Zones & Locations
+  const z1 = db.prepare("INSERT INTO zones (branch_id, name, type) VALUES (?, ?, ?)").run(b1, "Zone A - Dry", "DRY").lastInsertRowid;
+  db.prepare("INSERT INTO locations (zone_id, name, type, total_capacity) VALUES (?, ?, ?, ?)").run(z1, "A1-R1-S1", "RACK", 100);
+  db.prepare("INSERT INTO locations (zone_id, name, type, total_capacity) VALUES (?, ?, ?, ?)").run(z1, "A1-FL-01", "FLOOR", 500);
+
+  // Vendors
+  const v1 = db.prepare("INSERT INTO vendors (name, company_name, email, gst_number) VALUES (?, ?, ?, ?)").run("Reliance Retail", "Reliance Retail Ltd", "logistics@reliance.com", "27AAAAA0000A1Z5").lastInsertRowid;
+  
+  // Contracts
+  db.prepare("INSERT INTO contracts (vendor_id, branch_id, start_date, end_date, billing_cycle, rate_per_sqft) VALUES (?, ?, ?, ?, ?, ?)").run(v1, b1, "2024-01-01", "2025-01-01", "MONTHLY", 45.50);
+
+  // Categories
+  db.prepare("INSERT INTO categories (name) VALUES (?)").run("Electronics");
+  db.prepare("INSERT INTO categories (name) VALUES (?)").run("FMCG");
+
+  // Items
+  db.prepare(`
+    INSERT INTO items (vendor_id, name, sku, category_id, unit_type, quantity, location_id, price)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(v1, "iPhone 15 Pro", "IPH15P-128", 1, "Piece", 500, 1, 1200.00);
+}
+
+// Seed pricing config if empty
+const pricingCount = db.prepare("SELECT COUNT(*) as count FROM pricing_config").get() as { count: number };
+if (pricingCount.count === 0) {
+  const insertPricing = db.prepare("INSERT INTO pricing_config (key, value, unit, description) VALUES (?, ?, ?, ?)");
+  insertPricing.run("area_rate", 15, "sq ft / month", "Area Based Rental Rate");
+  insertPricing.run("volume_rate", 100, "cubic meter / month", "Volume Based Rental Rate");
+  insertPricing.run("pallet_rate", 50, "pallet / day", "Pallet Based Rental Rate");
+  insertPricing.run("rack_rate", 75, "rack / month", "Rack Based Rental Rate");
+}
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  app.use(express.json());
+
+  // API Routes
+  
+  // Dashboard Stats (Enterprise)
+  app.get("/api/stats", (req, res) => {
+    const totalBranches = db.prepare("SELECT COUNT(*) as count FROM branches").get() as any;
+    const totalVendors = db.prepare("SELECT COUNT(*) as count FROM vendors").get() as any;
+    const totalInventory = db.prepare("SELECT SUM(quantity) as count FROM items").get() as any;
+    const monthlyRevenue = db.prepare("SELECT SUM(total_amount) as total FROM invoices WHERE created_at >= date('now', 'start of month')").get() as any;
+    
+    const branchUtilization = db.prepare(`
+      SELECT b.name, 
+             (SELECT SUM(occupied_capacity) FROM locations l JOIN zones z ON l.zone_id = z.id WHERE z.branch_id = b.id) as occupied,
+             (SELECT SUM(total_capacity) FROM locations l JOIN zones z ON l.zone_id = z.id WHERE z.branch_id = b.id) as total
+      FROM branches b
+    `).all();
+
+    const recentTransactions = db.prepare(`
+      SELECT t.*, i.name as item_name, v.name as vendor_name
+      FROM transactions t 
+      JOIN items i ON t.item_id = i.id 
+      JOIN vendors v ON i.vendor_id = v.id
+      ORDER BY t.created_at DESC LIMIT 10
+    `).all();
+
+    res.json({
+      totalBranches: totalBranches.count,
+      totalVendors: totalVendors.count,
+      totalInventory: totalInventory.count || 0,
+      monthlyRevenue: monthlyRevenue.total || 0,
+      branchUtilization,
+      recentTransactions
+    });
+  });
+
+  // Branches
+  app.get("/api/branches", (req, res) => {
+    res.json(db.prepare("SELECT * FROM branches").all());
+  });
+
+  // Vendors
+  app.get("/api/vendors", (req, res) => {
+    res.json(db.prepare("SELECT * FROM vendors").all());
+  });
+
+  // Inventory
+  app.get("/api/inventory", (req, res) => {
+    const items = db.prepare(`
+      SELECT i.*, v.name as vendor_name, c.name as category_name, l.name as location_name, b.name as branch_name
+      FROM items i
+      JOIN vendors v ON i.vendor_id = v.id
+      LEFT JOIN categories c ON i.category_id = c.id
+      LEFT JOIN locations l ON i.location_id = l.id
+      LEFT JOIN zones z ON l.zone_id = z.id
+      LEFT JOIN branches b ON z.branch_id = b.id
+      ORDER BY i.updated_at DESC
+    `).all();
+    res.json(items);
+  });
+
+  app.post("/api/items", (req, res) => {
+    const { vendor_id, name, sku, category_id, unit_type, weight, volume, quantity, min_stock_level, location_id, price, gst_rate } = req.body;
+    try {
+      const info = db.prepare(`
+        INSERT INTO items (vendor_id, name, sku, category_id, unit_type, weight, volume, quantity, min_stock_level, location_id, price, gst_rate)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(vendor_id, name, sku, category_id, unit_type, weight, volume, quantity, min_stock_level, location_id, price, gst_rate);
+      res.json({ id: info.lastInsertRowid });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Billing
+  app.get("/api/invoices", (req, res) => {
+    const invoices = db.prepare(`
+      SELECT inv.*, v.name as vendor_name 
+      FROM invoices inv 
+      JOIN vendors v ON inv.vendor_id = v.id
+      ORDER BY inv.date DESC
+    `).all() as any[];
+    
+    // Attach items to each invoice
+    const invoicesWithItems = invoices.map(inv => {
+      const items = db.prepare("SELECT * FROM invoice_items WHERE invoice_id = ?").all(inv.id);
+      return { ...inv, items };
+    });
+    
+    res.json(invoicesWithItems);
+  });
+
+  app.get("/api/invoices/:id", (req, res) => {
+    const invoice = db.prepare(`
+      SELECT inv.*, v.name as vendor_name, v.company_name as vendor_company, v.address as vendor_address, v.gst_number as vendor_gst
+      FROM invoices inv 
+      JOIN vendors v ON inv.vendor_id = v.id
+      WHERE inv.id = ?
+    `).get(req.params.id) as any;
+    
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+    
+    const items = db.prepare("SELECT * FROM invoice_items WHERE invoice_id = ?").all(invoice.id);
+    res.json({ ...invoice, items });
+  });
+
+  app.post("/api/invoices", (req, res) => {
+    const { vendor_id, invoice_number, date, due_date, notes, items } = req.body;
+    
+    const dbTransaction = db.transaction(() => {
+      const total_amount = items.reduce((sum: number, item: any) => sum + item.amount, 0);
+      
+      const info = db.prepare(`
+        INSERT INTO invoices (vendor_id, invoice_number, date, due_date, total_amount, status, notes)
+        VALUES (?, ?, ?, ?, ?, 'UNPAID', ?)
+      `).run(vendor_id, invoice_number, date, due_date, total_amount, notes);
+      
+      const invoiceId = info.lastInsertRowid;
+      
+      const insertItem = db.prepare(`
+        INSERT INTO invoice_items (invoice_id, description, amount, type)
+        VALUES (?, ?, ?, ?)
+      `);
+      
+      for (const item of items) {
+        insertItem.run(invoiceId, item.description, item.amount, item.type);
+      }
+      
+      // Update Ledger (Debit)
+      const lastBalance = db.prepare("SELECT balance FROM ledger WHERE vendor_id = ? ORDER BY id DESC LIMIT 1").get(vendor_id) as any;
+      const currentBalance = (lastBalance?.balance || 0) + total_amount;
+      
+      db.prepare(`
+        INSERT INTO ledger (vendor_id, date, description, reference, debit, balance)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(vendor_id, date, `Invoice ${invoice_number}`, invoice_number, total_amount, currentBalance);
+      
+      return invoiceId;
+    });
+
+    try {
+      const id = dbTransaction();
+      res.json({ id });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Payments
+  app.get("/api/payments", (req, res) => {
+    res.json(db.prepare(`
+      SELECT p.*, v.name as vendor_name, inv.invoice_number
+      FROM payments p
+      JOIN vendors v ON p.vendor_id = v.id
+      LEFT JOIN invoices inv ON p.invoice_id = inv.id
+      ORDER BY p.date DESC
+    `).all());
+  });
+
+  app.post("/api/payments", (req, res) => {
+    const { vendor_id, invoice_id, amount, date, method, type, reference, notes } = req.body;
+    
+    const dbTransaction = db.transaction(() => {
+      // Record payment
+      const info = db.prepare(`
+        INSERT INTO payments (vendor_id, invoice_id, amount, date, method, type, reference, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(vendor_id, invoice_id, amount, date, method, type, reference, notes);
+      
+      // Update Invoice if applicable
+      if (invoice_id) {
+        const invoice = db.prepare("SELECT total_amount, paid_amount FROM invoices WHERE id = ?").get(invoice_id) as any;
+        const newPaidAmount = invoice.paid_amount + amount;
+        let status = 'PARTIAL';
+        if (newPaidAmount >= invoice.total_amount) status = 'PAID';
+        
+        db.prepare("UPDATE invoices SET paid_amount = ?, status = ? WHERE id = ?").run(newPaidAmount, status, invoice_id);
+      }
+      
+      // Update Ledger (Credit)
+      const lastBalance = db.prepare("SELECT balance FROM ledger WHERE vendor_id = ? ORDER BY id DESC LIMIT 1").get(vendor_id) as any;
+      const currentBalance = (lastBalance?.balance || 0) - amount;
+      
+      db.prepare(`
+        INSERT INTO ledger (vendor_id, date, description, reference, credit, balance)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(vendor_id, date, `Payment - ${method}`, reference || 'PAYMENT', amount, currentBalance);
+      
+      return info.lastInsertRowid;
+    });
+
+    try {
+      const id = dbTransaction();
+      res.json({ id });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Ledger
+  app.get("/api/ledger", (req, res) => {
+    res.json(db.prepare(`
+      SELECT l.*, v.name as vendor_name 
+      FROM ledger l
+      JOIN vendors v ON l.vendor_id = v.id
+      ORDER BY l.date DESC, l.id DESC
+    `).all());
+  });
+
+  app.get("/api/vendors/:id/ledger", (req, res) => {
+    res.json(db.prepare(`
+      SELECT * FROM ledger 
+      WHERE vendor_id = ? 
+      ORDER BY date ASC, id ASC
+    `).all(req.params.id));
+  });
+
+  // Transactions (Inward/Outward/Internal)
+  app.get("/api/transactions", (req, res) => {
+    res.json(db.prepare(`
+      SELECT t.*, i.name as item_name, v.name as vendor_name
+      FROM transactions t
+      JOIN items i ON t.item_id = i.id
+      JOIN vendors v ON i.vendor_id = v.id
+      ORDER BY t.created_at DESC
+    `).all());
+  });
+
+  app.post("/api/transactions", (req, res) => {
+    const { item_id, type, quantity, reference, target_location_id } = req.body;
+    
+    const dbTransaction = db.transaction(() => {
+      const item = db.prepare("SELECT quantity, price, gst_rate, location_id FROM items WHERE id = ?").get(item_id) as any;
+      if (!item) throw new Error("Item not found");
+      
+      if (type === 'INTERNAL') {
+        if (!target_location_id) throw new Error("Target location required for internal move");
+        
+        // Move from old location to new location
+        if (item.location_id) {
+          db.prepare("UPDATE locations SET occupied_capacity = occupied_capacity - ? WHERE id = ?").run(quantity, item.location_id);
+        }
+        db.prepare("UPDATE locations SET occupied_capacity = occupied_capacity + ? WHERE id = ?").run(quantity, target_location_id);
+        db.prepare("UPDATE items SET location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(target_location_id, item_id);
+      } else {
+        const newQuantity = type === 'IN' ? item.quantity + quantity : item.quantity - quantity;
+        if (newQuantity < 0) throw new Error("Insufficient stock");
+        
+        db.prepare("UPDATE items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(newQuantity, item_id);
+        
+        // Update location capacity
+        if (item.location_id) {
+          const adjustment = type === 'IN' ? quantity : -quantity;
+          db.prepare("UPDATE locations SET occupied_capacity = occupied_capacity + ? WHERE id = ?").run(adjustment, item.location_id);
+        }
+      }
+
+      const unitPrice = item.price;
+      const gstAmount = (unitPrice * quantity * item.gst_rate) / 100;
+      const totalAmount = (unitPrice * quantity) + gstAmount;
+
+      db.prepare(`
+        INSERT INTO transactions (item_id, type, quantity, unit_price, gst_amount, total_amount, reference) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(item_id, type, quantity, unitPrice, gstAmount, totalAmount, reference);
+    });
+
+    try {
+      dbTransaction();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Categories & Suppliers
+  app.get("/api/categories", (req, res) => {
+    res.json(db.prepare("SELECT * FROM categories").all());
+  });
+
+  app.get("/api/suppliers", (req, res) => {
+    res.json(db.prepare("SELECT * FROM suppliers").all());
+  });
+
+  app.post("/api/suppliers", (req, res) => {
+    const { name, email, phone, address, gst_number } = req.body;
+    try {
+      const info = db.prepare(`
+        INSERT INTO suppliers (name, email, phone, address, gst_number)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(name, email, phone, address, gst_number);
+      res.json({ id: info.lastInsertRowid });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/transactions/:id", (req, res) => {
+    const tx = db.prepare(`
+      SELECT t.*, i.name as item_name, i.sku as item_sku, v.name as vendor_name, v.address as vendor_address, v.gst_number as vendor_gst
+      FROM transactions t
+      JOIN items i ON t.item_id = i.id
+      JOIN vendors v ON i.vendor_id = v.id
+      WHERE t.id = ?
+    `).get(req.params.id);
+    if (!tx) return res.status(404).json({ error: "Transaction not found" });
+    res.json(tx);
+  });
+
+  app.get("/api/locations", (req, res) => {
+    res.json(db.prepare(`
+      SELECT l.*, z.name as zone_name, b.name as branch_name 
+      FROM locations l 
+      JOIN zones z ON l.zone_id = z.id 
+      JOIN branches b ON z.branch_id = b.id
+    `).all());
+  });
+
+  // Pricing Config
+  app.get("/api/pricing", (req, res) => {
+    res.json(db.prepare("SELECT * FROM pricing_config").all());
+  });
+
+  app.post("/api/pricing", (req, res) => {
+    const { pricing } = req.body; // Array of { key, value }
+    const updatePricing = db.prepare("UPDATE pricing_config SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?");
+    
+    const dbTransaction = db.transaction(() => {
+      for (const p of pricing) {
+        updatePricing.run(p.value, p.key);
+      }
+    });
+
+    try {
+      dbTransaction();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.join(__dirname, "dist")));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(__dirname, "dist", "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();
