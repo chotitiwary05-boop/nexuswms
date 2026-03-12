@@ -77,15 +77,22 @@ db.exec(`
     name TEXT NOT NULL,
     sku TEXT UNIQUE NOT NULL,
     description TEXT,
+    short_description TEXT,
+    model_number TEXT,
     category_id INTEGER,
     unit_type TEXT, -- Piece, Carton, Pallet
     weight REAL,
     volume REAL,
     quantity INTEGER DEFAULT 0,
+    damaged_quantity INTEGER DEFAULT 0,
+    expired_quantity INTEGER DEFAULT 0,
+    missing_quantity INTEGER DEFAULT 0,
     min_stock_level INTEGER DEFAULT 5,
     location_id INTEGER,
     price REAL,
     gst_rate REAL DEFAULT 18.0,
+    mfg_date DATE,
+    expiry_date DATE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (vendor_id) REFERENCES vendors(id),
@@ -96,7 +103,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL,
-    type TEXT CHECK(type IN ('IN', 'OUT', 'INTERNAL')) NOT NULL,
+    type TEXT CHECK(type IN ('IN', 'OUT', 'INTERNAL', 'DAMAGED', 'EXPIRED', 'MISSING', 'RETURN')) NOT NULL,
     quantity INTEGER NOT NULL,
     unit_price REAL,
     gst_amount REAL,
@@ -175,6 +182,61 @@ db.exec(`
     unit TEXT,
     description TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS inward_goods (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    grn_no TEXT UNIQUE NOT NULL,
+    vendor_id INTEGER NOT NULL,
+    warehouse TEXT NOT NULL,
+    date_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'GRN',
+    lr_number TEXT,
+    courier_name TEXT,
+    courier_details TEXT,
+    tracking_number TEXT,
+    third_party_courier TEXT,
+    third_party_tracking TEXT,
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS inward_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    inward_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL,
+    weight REAL,
+    volume REAL,
+    storage_location TEXT,
+    FOREIGN KEY (inward_id) REFERENCES inward_goods(id),
+    FOREIGN KEY (item_id) REFERENCES items(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS outward_goods (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dispatch_order_id TEXT UNIQUE NOT NULL,
+    vendor_id INTEGER NOT NULL,
+    destination TEXT,
+    vehicle_details TEXT,
+    date_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'Requested',
+    lr_number TEXT,
+    courier_name TEXT,
+    courier_details TEXT,
+    tracking_number TEXT,
+    third_party_courier TEXT,
+    third_party_tracking TEXT,
+    FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS outward_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outward_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL,
+    weight REAL,
+    FOREIGN KEY (outward_id) REFERENCES outward_goods(id),
+    FOREIGN KEY (item_id) REFERENCES items(id)
   );
 `);
 
@@ -283,12 +345,41 @@ async function startServer() {
   });
 
   app.post("/api/items", (req, res) => {
-    const { vendor_id, name, sku, category_id, unit_type, weight, volume, quantity, min_stock_level, location_id, price, gst_rate } = req.body;
+    const { 
+      vendorId, vendor_id, 
+      name, 
+      sku, 
+      categoryId, category_id, 
+      unitType, unit_type, 
+      weight, 
+      volume, 
+      quantity, 
+      minStock, min_stock_level, 
+      locationId, location_id, 
+      price, 
+      gstRate, gst_rate, 
+      modelNumber, model_number, 
+      shortDescription, short_description, 
+      mfgDate, mfg_date, 
+      expiryDate, expiry_date 
+    } = req.body;
+    
+    const v_id = vendorId || vendor_id;
+    const c_id = categoryId || category_id;
+    const u_type = unitType || unit_type;
+    const m_stock = minStock || min_stock_level;
+    const l_id = locationId || location_id;
+    const g_rate = gstRate || gst_rate;
+    const m_number = modelNumber || model_number;
+    const s_desc = shortDescription || short_description;
+    const m_date = mfgDate || mfg_date;
+    const e_date = expiryDate || expiry_date;
+
     try {
       const info = db.prepare(`
-        INSERT INTO items (vendor_id, name, sku, category_id, unit_type, weight, volume, quantity, min_stock_level, location_id, price, gst_rate)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(vendor_id, name, sku, category_id, unit_type, weight, volume, quantity, min_stock_level, location_id, price, gst_rate);
+        INSERT INTO items (vendor_id, name, sku, category_id, unit_type, weight, volume, quantity, min_stock_level, location_id, price, gst_rate, model_number, short_description, mfg_date, expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(v_id, name, sku, c_id, u_type, weight, volume, quantity, m_stock, l_id, price, g_rate, m_number, s_desc, m_date, e_date);
       res.json({ id: info.lastInsertRowid });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -449,11 +540,192 @@ async function startServer() {
     `).all());
   });
 
+  // Inward Goods (GRN)
+  app.get("/api/inward", (req, res) => {
+    const records = db.prepare(`
+      SELECT ig.*, v.name as vendor_name
+      FROM inward_goods ig
+      JOIN vendors v ON ig.vendor_id = v.id
+      ORDER BY ig.date_time DESC
+    `).all() as any[];
+
+    const results = records.map(record => {
+      const items = db.prepare(`
+        SELECT ii.*, i.name as item_name, i.model_number, i.short_description
+        FROM inward_items ii
+        JOIN items i ON ii.item_id = i.id
+        WHERE ii.inward_id = ?
+      `).all(record.id);
+      return { 
+        grnNo: record.grn_no,
+        vendorId: record.vendor_id,
+        vendorName: record.vendor_name,
+        warehouse: record.warehouse,
+        dateTime: record.date_time,
+        status: record.status,
+        lrNumber: record.lr_number,
+        courierName: record.courier_name,
+        courierDetails: record.courier_details,
+        trackingNumber: record.tracking_number,
+        thirdPartyCourier: record.third_party_courier,
+        thirdPartyTracking: record.third_party_tracking,
+        items: items.map(i => ({
+          itemId: i.item_id,
+          itemName: i.item_name,
+          modelNumber: i.model_number,
+          shortDescription: i.short_description,
+          quantity: i.quantity,
+          weight: i.weight,
+          volume: i.volume,
+          storageLocation: i.storage_location
+        }))
+      };
+    });
+
+    res.json(results);
+  });
+
+  app.post("/api/inward", (req, res) => {
+    const { grnNo, vendorId, warehouse, items, lrNumber, courierName, courierDetails, trackingNumber, thirdPartyCourier, thirdPartyTracking } = req.body;
+    
+    const dbTransaction = db.transaction(() => {
+      const info = db.prepare(`
+        INSERT INTO inward_goods (grn_no, vendor_id, warehouse, lr_number, courier_name, courier_details, tracking_number, third_party_courier, third_party_tracking)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(grnNo, vendorId, warehouse, lrNumber, courierName, courierDetails, trackingNumber, thirdPartyCourier, thirdPartyTracking);
+      
+      const inwardId = info.lastInsertRowid;
+
+      for (const item of items) {
+        db.prepare(`
+          INSERT INTO inward_items (inward_id, item_id, quantity, weight, volume, storage_location)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(inwardId, item.itemId, item.quantity, item.weight, item.volume, item.storageLocation);
+
+        // Update inventory
+        db.prepare("UPDATE items SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(item.quantity, item.itemId);
+
+        // Record transaction
+        db.prepare(`
+          INSERT INTO transactions (item_id, type, quantity, reference)
+          VALUES (?, 'IN', ?, ?)
+        `).run(item.itemId, item.quantity, grnNo);
+      }
+
+      return inwardId;
+    });
+
+    try {
+      const id = dbTransaction();
+      res.json({ id });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/inward/:grnNo/status", (req, res) => {
+    const { status } = req.body;
+    try {
+      db.prepare("UPDATE inward_goods SET status = ? WHERE grn_no = ?").run(status, req.params.grnNo);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Outward Goods (Dispatch)
+  app.get("/api/outward", (req, res) => {
+    const records = db.prepare(`
+      SELECT og.*, v.name as vendor_name
+      FROM outward_goods og
+      JOIN vendors v ON og.vendor_id = v.id
+      ORDER BY og.date_time DESC
+    `).all() as any[];
+
+    const results = records.map(record => {
+      const items = db.prepare(`
+        SELECT oi.*, i.name as item_name, i.model_number, i.short_description
+        FROM outward_items oi
+        JOIN items i ON oi.item_id = i.id
+        WHERE oi.outward_id = ?
+      `).all(record.id);
+      return { 
+        dispatchOrderId: record.dispatch_order_id,
+        vendorId: record.vendor_id,
+        vendorName: record.vendor_name,
+        destination: record.destination,
+        vehicleDetails: record.vehicle_details,
+        dateTime: record.date_time,
+        status: record.status,
+        lrNumber: record.lr_number,
+        courierName: record.courier_name,
+        courierDetails: record.courier_details,
+        trackingNumber: record.tracking_number,
+        thirdPartyCourier: record.third_party_courier,
+        thirdPartyTracking: record.third_party_tracking,
+        items: items.map(i => ({
+          itemId: i.item_id,
+          itemName: i.item_name,
+          modelNumber: i.model_number,
+          shortDescription: i.short_description,
+          quantity: i.quantity,
+          weight: i.weight
+        }))
+      };
+    });
+
+    res.json(results);
+  });
+
+  app.post("/api/outward", (req, res) => {
+    const { dispatchOrderId, vendorId, destination, vehicleDetails, items, lrNumber, courierName, courierDetails, trackingNumber, thirdPartyCourier, thirdPartyTracking } = req.body;
+    
+    const dbTransaction = db.transaction(() => {
+      const info = db.prepare(`
+        INSERT INTO outward_goods (dispatch_order_id, vendor_id, destination, vehicle_details, lr_number, courier_name, courier_details, tracking_number, third_party_courier, third_party_tracking)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(dispatchOrderId, vendorId, destination, vehicleDetails, lrNumber, courierName, courierDetails, trackingNumber, thirdPartyCourier, thirdPartyTracking);
+      
+      const outwardId = info.lastInsertRowid;
+
+      for (const item of items) {
+        // Check stock
+        const currentItem = db.prepare("SELECT quantity FROM items WHERE id = ?").get(item.itemId) as any;
+        if (currentItem.quantity < item.quantity) {
+          throw new Error(`Insufficient stock for item ID ${item.itemId}`);
+        }
+
+        db.prepare(`
+          INSERT INTO outward_items (outward_id, item_id, quantity, weight)
+          VALUES (?, ?, ?, ?)
+        `).run(outwardId, item.itemId, item.quantity, item.weight);
+
+        // Update inventory
+        db.prepare("UPDATE items SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(item.quantity, item.itemId);
+
+        // Record transaction
+        db.prepare(`
+          INSERT INTO transactions (item_id, type, quantity, reference)
+          VALUES (?, 'OUT', ?, ?)
+        `).run(item.itemId, item.quantity, dispatchOrderId);
+      }
+
+      return outwardId;
+    });
+
+    try {
+      const id = dbTransaction();
+      res.json({ id });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.post("/api/transactions", (req, res) => {
     const { item_id, type, quantity, reference, target_location_id } = req.body;
     
     const dbTransaction = db.transaction(() => {
-      const item = db.prepare("SELECT quantity, price, gst_rate, location_id FROM items WHERE id = ?").get(item_id) as any;
+      const item = db.prepare("SELECT quantity, damaged_quantity, expired_quantity, missing_quantity, price, gst_rate, location_id FROM items WHERE id = ?").get(item_id) as any;
       if (!item) throw new Error("Item not found");
       
       if (type === 'INTERNAL') {
@@ -465,6 +737,23 @@ async function startServer() {
         }
         db.prepare("UPDATE locations SET occupied_capacity = occupied_capacity + ? WHERE id = ?").run(quantity, target_location_id);
         db.prepare("UPDATE items SET location_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(target_location_id, item_id);
+      } else if (type === 'DAMAGED') {
+        if (item.quantity < quantity) throw new Error("Insufficient stock to mark as damaged");
+        db.prepare("UPDATE items SET quantity = quantity - ?, damaged_quantity = damaged_quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(quantity, quantity, item_id);
+      } else if (type === 'EXPIRED') {
+        if (item.quantity < quantity) throw new Error("Insufficient stock to mark as expired");
+        db.prepare("UPDATE items SET quantity = quantity - ?, expired_quantity = expired_quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(quantity, quantity, item_id);
+      } else if (type === 'MISSING') {
+        if (item.quantity < quantity) throw new Error("Insufficient stock to mark as missing");
+        db.prepare("UPDATE items SET quantity = quantity - ?, missing_quantity = missing_quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(quantity, quantity, item_id);
+      } else if (type === 'RETURN') {
+        // Return adds back to quantity
+        db.prepare("UPDATE items SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(quantity, item_id);
+        
+        // Update location capacity if exists
+        if (item.location_id) {
+          db.prepare("UPDATE locations SET occupied_capacity = occupied_capacity + ? WHERE id = ?").run(quantity, item.location_id);
+        }
       } else {
         const newQuantity = type === 'IN' ? item.quantity + quantity : item.quantity - quantity;
         if (newQuantity < 0) throw new Error("Insufficient stock");
@@ -562,6 +851,23 @@ async function startServer() {
     }
   });
 
+  // SQL Editor (Admin Only - simplified for now)
+  app.post("/api/sql", (req, res) => {
+    const { query } = req.body;
+    try {
+      const result = db.prepare(query).all();
+      res.json(result);
+    } catch (err: any) {
+      // If it's a non-select query, try run()
+      try {
+        const result = db.prepare(query).run();
+        res.json(result);
+      } catch (runErr: any) {
+        res.status(400).json({ error: runErr.message });
+      }
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -575,6 +881,61 @@ async function startServer() {
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
   }
+
+  // Damaged Product Returns
+  app.post("/api/returns", (req, res) => {
+    const { itemId, quantity, reason, vendorId, warehouse } = req.body;
+    
+    if (!itemId || !quantity || !vendorId || !warehouse) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    try {
+      const dbTransaction = db.transaction(() => {
+        // 1. Check current stock
+        const item = db.prepare('SELECT quantity, name, price, gst_rate FROM items WHERE id = ?').get(itemId) as any;
+        if (!item || item.quantity < quantity) {
+          throw new Error("Insufficient stock to return");
+        }
+
+        // 2. Update inventory (reduce stock)
+        db.prepare('UPDATE items SET quantity = quantity - ?, damaged_quantity = damaged_quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(quantity, quantity, itemId);
+
+        // 3. Record transaction
+        const unitPrice = item.price || 0;
+        const gstAmount = (unitPrice * quantity * (item.gst_rate || 18)) / 100;
+        const totalAmount = (unitPrice * quantity) + gstAmount;
+
+        db.prepare(`
+          INSERT INTO transactions (item_id, type, quantity, unit_price, gst_amount, total_amount, reference)
+          VALUES (?, 'RETURN', ?, ?, ?, ?, ?)
+        `).run(itemId, quantity, unitPrice, gstAmount, totalAmount, `Return: ${reason || 'Damaged'}`);
+
+        // 4. Update ledger (Accounting adjustment - credit the vendor for returned goods)
+        const lastBalance = db.prepare("SELECT balance FROM ledger WHERE vendor_id = ? ORDER BY id DESC LIMIT 1").get(vendorId) as any;
+        const currentBalance = (lastBalance?.balance || 0) - totalAmount;
+
+        db.prepare(`
+          INSERT INTO ledger (vendor_id, date, description, reference, credit, balance)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          vendorId, 
+          new Date().toISOString().split('T')[0], 
+          `Damaged Product Return: ${item.name} (Qty: ${quantity})`, 
+          'RETURN',
+          totalAmount,
+          currentBalance
+        );
+
+        return true;
+      });
+
+      dbTransaction();
+      res.json({ message: "Return processed successfully" });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

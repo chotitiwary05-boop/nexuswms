@@ -25,33 +25,63 @@ export interface ItemMaster {
   weight: number; // kg
   volume: number; // m3
   price?: number;
+  modelNumber?: string;
+  shortDescription?: string;
+  mfgDate?: string;
+  expiryDate?: string;
+}
+
+export interface InwardItem {
+  itemId: string;
+  itemName: string;
+  modelNumber?: string;
+  shortDescription?: string;
+  quantity: number;
+  weight: number;
+  volume: number;
+  storageLocation: string;
 }
 
 export interface InwardGoods {
   grnNo: string;
   vendorId: string;
   vendorName: string;
-  itemId: string;
-  itemName: string;
-  quantity: number;
-  weight: number;
-  volume: number;
+  items: InwardItem[];
   warehouse: string;
-  storageLocation: string;
   dateTime: string;
   status: 'Gate Entry' | 'GRN' | 'Quality Check' | 'Stored';
+  lrNumber?: string;
+  courierName?: string;
+  courierDetails?: string;
+  trackingNumber?: string;
+  thirdPartyCourier?: string;
+  thirdPartyTracking?: string;
+}
+
+export interface OutwardItem {
+  itemId: string;
+  itemName: string;
+  modelNumber?: string;
+  shortDescription?: string;
+  quantity: number;
+  weight: number;
 }
 
 export interface OutwardGoods {
   dispatchOrderId: string;
-  itemId: string;
-  itemName: string;
-  quantity: number;
-  weight: number;
+  vendorId: string;
+  vendorName: string;
+  items: OutwardItem[];
   destination: string;
   vehicleDetails: string;
   dateTime: string;
   status: 'Requested' | 'Approved' | 'Picking' | 'Packing' | 'Gate Pass' | 'Dispatched';
+  lrNumber?: string;
+  courierName?: string;
+  courierDetails?: string;
+  trackingNumber?: string;
+  thirdPartyCourier?: string;
+  thirdPartyTracking?: string;
 }
 
 export interface InventoryRecord {
@@ -60,6 +90,9 @@ export interface InventoryRecord {
   vendorId: string;
   vendorName: string;
   quantity: number;
+  damagedQuantity?: number;
+  expiredQuantity?: number;
+  missingQuantity?: number;
   location: string;
   warehouse: string;
   lastUpdated: string;

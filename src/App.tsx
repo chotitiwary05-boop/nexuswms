@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Activity,
   Settings,
+  Settings2,
   X,
   ChevronDown,
   Camera,
@@ -37,7 +38,8 @@ import {
   Database,
   FileUp,
   ArrowDownLeft,
-  ArrowUpRight
+  ArrowUpRight,
+  RotateCcw
 } from 'lucide-react';
 import BarcodeGenerator from 'react-barcode';
 import { motion, AnimatePresence } from 'motion/react';
@@ -60,7 +62,9 @@ import {
   VendorContract, 
   ItemMaster, 
   InwardGoods, 
+  InwardItem,
   OutwardGoods, 
+  OutwardItem,
   InventoryRecord, 
   WarehouseUtilization,
   ContractType,
@@ -148,13 +152,17 @@ const MOCK_INWARD: InwardGoods[] = [
     grnNo: 'GRN00045',
     vendorId: 'V001',
     vendorName: 'ABC Traders',
-    itemId: 'ITEM002',
-    itemName: 'LED TV',
-    quantity: 50,
-    weight: 750,
-    volume: 40,
+    items: [
+      {
+        itemId: 'ITEM002',
+        itemName: 'LED TV',
+        quantity: 50,
+        weight: 750,
+        volume: 40,
+        storageLocation: 'Rack A2'
+      }
+    ],
     warehouse: 'Delhi Hub',
-    storageLocation: 'Rack A2',
     dateTime: '2024-03-10 10:30',
     status: 'Stored'
   },
@@ -162,13 +170,17 @@ const MOCK_INWARD: InwardGoods[] = [
     grnNo: 'GRN00046',
     vendorId: 'V003',
     vendorName: 'Tech Solutions',
-    itemId: 'ITEM004',
-    itemName: 'Laptop Pro',
-    quantity: 100,
-    weight: 250,
-    volume: 5,
+    items: [
+      {
+        itemId: 'ITEM004',
+        itemName: 'Laptop Pro',
+        quantity: 100,
+        weight: 250,
+        volume: 5,
+        storageLocation: 'Rack C1'
+      }
+    ],
     warehouse: 'Bangalore East',
-    storageLocation: 'Rack C1',
     dateTime: '2024-03-11 09:15',
     status: 'Stored'
   },
@@ -176,13 +188,17 @@ const MOCK_INWARD: InwardGoods[] = [
     grnNo: 'GRN00047',
     vendorId: 'V002',
     vendorName: 'Global Logistics',
-    itemId: 'ITEM005',
-    itemName: 'Dining Table',
-    quantity: 10,
-    weight: 450,
-    volume: 12,
+    items: [
+      {
+        itemId: 'ITEM005',
+        itemName: 'Dining Table',
+        quantity: 10,
+        weight: 450,
+        volume: 12,
+        storageLocation: 'Floor Area 1'
+      }
+    ],
     warehouse: 'Mumbai West',
-    storageLocation: 'Floor Area 1',
     dateTime: '2024-03-11 11:45',
     status: 'Quality Check'
   },
@@ -190,13 +206,17 @@ const MOCK_INWARD: InwardGoods[] = [
     grnNo: 'GRN00048',
     vendorId: 'V004',
     vendorName: 'Fresh Foods Ltd',
-    itemId: 'ITEM006',
-    itemName: 'Air Conditioner',
-    quantity: 20,
-    weight: 700,
-    volume: 12,
+    items: [
+      {
+        itemId: 'ITEM006',
+        itemName: 'Air Conditioner',
+        quantity: 20,
+        weight: 700,
+        volume: 12,
+        storageLocation: 'Rack D2'
+      }
+    ],
     warehouse: 'Delhi Hub',
-    storageLocation: 'Rack D2',
     dateTime: '2024-03-12 08:30',
     status: 'Gate Entry'
   }
@@ -205,10 +225,16 @@ const MOCK_INWARD: InwardGoods[] = [
 const MOCK_OUTWARD: OutwardGoods[] = [
   {
     dispatchOrderId: 'DO00123',
-    itemId: 'ITEM001',
-    itemName: 'Mobile Phone',
-    quantity: 20,
-    weight: 10,
+    vendorId: 'V001',
+    vendorName: 'ABC Traders',
+    items: [
+      {
+        itemId: 'ITEM001',
+        itemName: 'Mobile Phone',
+        quantity: 20,
+        weight: 10
+      }
+    ],
     destination: 'Retail Store - Bangalore',
     vehicleDetails: 'KA-01-MH-1234',
     dateTime: '2024-03-11 14:00',
@@ -216,10 +242,16 @@ const MOCK_OUTWARD: OutwardGoods[] = [
   },
   {
     dispatchOrderId: 'DO00124',
-    itemId: 'ITEM002',
-    itemName: 'LED TV',
-    quantity: 5,
-    weight: 75,
+    vendorId: 'V001',
+    vendorName: 'ABC Traders',
+    items: [
+      {
+        itemId: 'ITEM002',
+        itemName: 'LED TV',
+        quantity: 5,
+        weight: 75
+      }
+    ],
     destination: 'Customer Home - Delhi',
     vehicleDetails: 'DL-01-AB-5678',
     dateTime: '2024-03-12 10:00',
@@ -227,10 +259,16 @@ const MOCK_OUTWARD: OutwardGoods[] = [
   },
   {
     dispatchOrderId: 'DO00125',
-    itemId: 'ITEM003',
-    itemName: 'Office Chair',
-    quantity: 15,
-    weight: 150,
+    vendorId: 'V002',
+    vendorName: 'Global Logistics',
+    items: [
+      {
+        itemId: 'ITEM003',
+        itemName: 'Office Chair',
+        quantity: 15,
+        weight: 150
+      }
+    ],
     destination: 'Corporate Office - Mumbai',
     vehicleDetails: 'MH-02-XY-9012',
     dateTime: '2024-03-12 11:30',
@@ -846,7 +884,8 @@ const InventoryView = ({
   onViewItem,
   onPrint,
   onExportExcel,
-  onExportPDF
+  onExportPDF,
+  onStockAdjustment
 }: { 
   inventory: InventoryRecord[], 
   items: ItemMaster[], 
@@ -856,7 +895,8 @@ const InventoryView = ({
   onViewItem: (i: ItemMaster) => void,
   onPrint: () => void,
   onExportExcel: () => void,
-  onExportPDF: () => void
+  onExportPDF: () => void,
+  onStockAdjustment: (item: InventoryRecord) => void
 }) => {
   const [tab, setTab] = useState<'master' | 'tracking'>('tracking');
 
@@ -885,10 +925,9 @@ const InventoryView = ({
                 <tr className="border-b border-zinc-100">
                   <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Item</th>
                   <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Vendor</th>
-                  <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Qty</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Available</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Damaged/Exp/Miss</th>
                   <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Location</th>
-                  <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Warehouse</th>
-                  <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Aging</th>
                   <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
@@ -902,24 +941,35 @@ const InventoryView = ({
                     <td className="py-4 text-sm text-zinc-600">{inv.vendorName}</td>
                     <td className="py-4 text-sm font-black text-zinc-900">{inv.quantity}</td>
                     <td className="py-4">
+                      <div className="flex gap-1">
+                        {inv.damagedQuantity ? <span className="px-1.5 py-0.5 bg-rose-50 text-rose-600 text-[10px] font-bold rounded" title="Damaged">{inv.damagedQuantity}D</span> : null}
+                        {inv.expiredQuantity ? <span className="px-1.5 py-0.5 bg-amber-50 text-amber-600 text-[10px] font-bold rounded" title="Expired">{inv.expiredQuantity}E</span> : null}
+                        {inv.missingQuantity ? <span className="px-1.5 py-0.5 bg-zinc-100 text-zinc-600 text-[10px] font-bold rounded" title="Missing">{inv.missingQuantity}M</span> : null}
+                        {!inv.damagedQuantity && !inv.expiredQuantity && !inv.missingQuantity && <span className="text-zinc-300 text-[10px]">None</span>}
+                      </div>
+                    </td>
+                    <td className="py-4">
                       <div className="flex items-center gap-2 text-xs text-zinc-600">
                         <MapPin size={12} className="text-zinc-400" />
                         {inv.location}
                       </div>
                     </td>
-                    <td className="py-4 text-sm text-zinc-600">{inv.warehouse}</td>
-                    <td className="py-4">
-                      <Badge variant={inv.agingDays > 30 ? 'error' : inv.agingDays > 15 ? 'warning' : 'success'}>
-                        {inv.agingDays} Days
-                      </Badge>
-                    </td>
                     <td className="py-4 text-right">
-                      <ActionButtons 
-                        onView={() => onViewItem(items.find(i => i.id === inv.itemId) || items[0])}
-                        onPrint={onPrint}
-                        onExportExcel={onExportExcel}
-                        onExportPDF={onExportPDF}
-                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => onStockAdjustment(inv)}
+                          className="p-2 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 rounded-lg transition-colors"
+                          title="Stock Adjustment"
+                        >
+                          <Settings2 size={16} />
+                        </button>
+                        <ActionButtons 
+                          onView={() => onViewItem(items.find(i => i.id === inv.itemId) || items[0])}
+                          onPrint={onPrint}
+                          onExportExcel={onExportExcel}
+                          onExportPDF={onExportPDF}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -933,22 +983,23 @@ const InventoryView = ({
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-zinc-100">
-                  <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Item ID</th>
                   <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Item Name</th>
+                  <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Model #</th>
                   <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">SKU</th>
                   <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Category</th>
-                  <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Unit</th>
                   <th className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
                 {items.map((item) => (
                   <tr key={item.id} className="hover:bg-zinc-50 transition-colors">
-                    <td className="py-4 text-xs font-mono font-bold text-zinc-400">{item.id}</td>
-                    <td className="py-4 text-sm font-bold text-zinc-900">{item.name}</td>
+                    <td className="py-4">
+                      <p className="text-sm font-bold text-zinc-900">{item.name}</p>
+                      <p className="text-[10px] text-zinc-400">{item.shortDescription || 'No description'}</p>
+                    </td>
+                    <td className="py-4 text-sm text-zinc-600 font-mono">{item.modelNumber || '-'}</td>
                     <td className="py-4 text-sm text-zinc-600 font-mono">{item.sku}</td>
                     <td className="py-4 text-sm text-zinc-600">{item.category}</td>
-                    <td className="py-4 text-sm text-zinc-600">{item.unitType}</td>
                     <td className="py-4 text-right">
                       <ActionButtons 
                         onEdit={() => onEditItem(item)} 
@@ -982,7 +1033,8 @@ const InwardView = ({
   onPrint, 
   onExportExcel, 
   onExportPDF,
-  onUpdateStatus
+  onUpdateStatus,
+  onProcessReturn
 }: { 
   records: InwardGoods[], 
   onNewGRN: () => void, 
@@ -995,7 +1047,8 @@ const InwardView = ({
   onPrint: () => void, 
   onExportExcel: () => void, 
   onExportPDF: () => void,
-  onUpdateStatus: (id: string, status: InwardGoods['status']) => void
+  onUpdateStatus: (id: string, status: InwardGoods['status']) => void,
+  onProcessReturn: () => void
 }) => (
   <div className="space-y-6">
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1027,6 +1080,13 @@ const InwardView = ({
         <div className="p-2 bg-zinc-100 rounded-lg text-zinc-900"><WarehouseIcon size={20} /></div>
         <p className="text-[10px] font-bold text-zinc-400 uppercase">Storage Allocation</p>
       </button>
+      <button 
+        onClick={onProcessReturn}
+        className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex flex-col items-center justify-center text-center gap-2 hover:bg-rose-100 transition-colors"
+      >
+        <div className="p-2 bg-rose-100 rounded-lg text-rose-600"><RotateCcw size={20} /></div>
+        <p className="text-[10px] font-bold text-rose-400 uppercase">Return Damaged</p>
+      </button>
     </div>
 
     <Card title="Inward Goods Management" subtitle="Goods Receipt Note (GRN) Records" action={<button onClick={onNewGRN} className="px-4 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg flex items-center gap-2 hover:bg-zinc-800 transition-colors"><Plus size={14} /> New GRN</button>}>
@@ -1048,9 +1108,22 @@ const InwardView = ({
               <tr key={item.grnNo} className="hover:bg-zinc-50 transition-colors">
                 <td className="py-4 text-xs font-mono font-bold text-zinc-900">{item.grnNo}</td>
                 <td className="py-4 text-sm text-zinc-600">{item.vendorName}</td>
-                <td className="py-4 text-sm font-bold text-zinc-900">{item.itemName}</td>
-                <td className="py-4 text-sm font-black text-zinc-900">{item.quantity}</td>
-                <td className="py-4 text-sm text-zinc-600">{item.storageLocation}</td>
+                <td className="py-4 text-sm font-bold text-zinc-900">
+                  {item.items && item.items.length > 0 ? (
+                    <div className="flex flex-col">
+                      <span className="text-xs">{item.items[0].itemName}</span>
+                      {item.items.length > 1 && <span className="text-[10px] text-zinc-400">+{item.items.length - 1} more items</span>}
+                    </div>
+                  ) : (
+                    'N/A'
+                  )}
+                </td>
+                <td className="py-4 text-sm font-black text-zinc-900">
+                  {item.items?.reduce((sum, i) => sum + i.quantity, 0) || 0}
+                </td>
+                <td className="py-4 text-sm text-zinc-600">
+                  {item.items?.[0]?.storageLocation || 'N/A'}
+                </td>
                 <td className="py-4">
                   <select 
                     value={item.status} 
@@ -1118,8 +1191,19 @@ const OutwardView = ({
           {records.map((item) => (
             <tr key={item.dispatchOrderId} className="hover:bg-zinc-50 transition-colors">
               <td className="py-4 text-xs font-mono font-bold text-zinc-900">{item.dispatchOrderId}</td>
-              <td className="py-4 text-sm font-bold text-zinc-900">{item.itemName}</td>
-              <td className="py-4 text-sm font-black text-zinc-900">{item.quantity}</td>
+              <td className="py-4 text-sm font-bold text-zinc-900">
+                {item.items && item.items.length > 0 ? (
+                  <div className="flex flex-col">
+                    <span className="text-xs">{item.items[0].itemName}</span>
+                    {item.items.length > 1 && <span className="text-[10px] text-zinc-400">+{item.items.length - 1} more items</span>}
+                  </div>
+                ) : (
+                  'N/A'
+                )}
+              </td>
+              <td className="py-4 text-sm font-black text-zinc-900">
+                {item.items?.reduce((sum, i) => sum + i.quantity, 0) || 0}
+              </td>
               <td className="py-4 text-sm text-zinc-600">{item.destination}</td>
               <td className="py-4"><Badge variant="info">{item.status}</Badge></td>
               <td className="py-4 text-right">
@@ -1218,8 +1302,16 @@ const ReportsView = ({
         );
       case 'daily-activity':
         const activityData = [
-          ...inward.map(i => ({ time: i.dateTime, type: 'Inward', desc: `Received ${i.quantity} units of ${i.itemName}` })),
-          ...outward.map(o => ({ time: o.dateTime, type: 'Outward', desc: `Dispatched ${o.quantity} units of ${o.itemName}` }))
+          ...inward.map(i => ({ 
+            time: i.dateTime, 
+            type: 'Inward', 
+            desc: `Received ${i.items?.reduce((sum, item) => sum + item.quantity, 0) || 0} units of ${i.items?.[0]?.itemName || 'items'}${i.items?.length > 1 ? ` (+${i.items.length - 1} more)` : ''}` 
+          })),
+          ...outward.map(o => ({ 
+            time: o.dateTime, 
+            type: 'Outward', 
+            desc: `Dispatched ${o.items?.reduce((sum, item) => sum + item.quantity, 0) || 0} units of ${o.items?.[0]?.itemName || 'items'}${o.items?.length > 1 ? ` (+${o.items.length - 1} more)` : ''}` 
+          }))
         ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
         return (
           <div className="space-y-4">
@@ -1258,8 +1350,18 @@ const ReportsView = ({
         );
       case 'stock-movement':
         const movementData = [
-          ...inward.map(i => ({ date: i.dateTime.split(' ')[0], type: 'Inward', qty: i.quantity, name: i.itemName })),
-          ...outward.map(o => ({ date: o.dateTime.split(' ')[0], type: 'Outward', qty: -o.quantity, name: o.itemName }))
+          ...inward.flatMap(i => (i.items || []).map(item => ({ 
+            date: i.dateTime.split(' ')[0], 
+            type: 'Inward', 
+            qty: item.quantity, 
+            name: item.itemName 
+          }))),
+          ...outward.flatMap(o => (o.items || []).map(item => ({ 
+            date: o.dateTime.split(' ')[0], 
+            type: 'Outward', 
+            qty: -item.quantity, 
+            name: item.itemName 
+          })))
         ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         return (
           <div className="overflow-x-auto">
@@ -1350,9 +1452,18 @@ const ReportsView = ({
                 {outward.map((item, idx) => (
                   <tr key={idx} className="hover:bg-zinc-50 transition-colors">
                     <td className="py-4 text-xs font-mono font-bold text-zinc-900">{item.dispatchOrderId}</td>
-                    <td className="py-4 text-sm text-zinc-900 font-bold">{item.itemName}</td>
+                    <td className="py-4 text-sm text-zinc-900 font-bold">
+                      {item.items && item.items.length > 0 ? (
+                        <div className="flex flex-col">
+                          <span>{item.items[0].itemName}</span>
+                          {item.items.length > 1 && <span className="text-[10px] text-zinc-400">+{item.items.length - 1} more items</span>}
+                        </div>
+                      ) : 'N/A'}
+                    </td>
                     <td className="py-4 text-sm text-zinc-600">{item.destination}</td>
-                    <td className="py-4 text-sm font-black text-rose-600 text-right">{item.quantity}</td>
+                    <td className="py-4 text-sm font-black text-rose-600 text-right">
+                      {item.items?.reduce((sum, i) => sum + i.quantity, 0) || 0}
+                    </td>
                     <td className="py-4">
                       <Badge variant="info">{item.status}</Badge>
                     </td>
@@ -1456,8 +1567,17 @@ const ReportsView = ({
                   <tr key={idx} className="hover:bg-zinc-50 transition-colors">
                     <td className="py-4 text-xs font-mono font-bold text-zinc-900">{item.grnNo}</td>
                     <td className="py-4 text-sm text-zinc-600">{item.vendorName}</td>
-                    <td className="py-4 text-sm text-zinc-900 font-bold">{item.itemName}</td>
-                    <td className="py-4 text-sm font-black text-zinc-900 text-right">{item.quantity}</td>
+                    <td className="py-4 text-sm text-zinc-900 font-bold">
+                      {item.items && item.items.length > 0 ? (
+                        <div className="flex flex-col">
+                          <span>{item.items[0].itemName}</span>
+                          {item.items.length > 1 && <span className="text-[10px] text-zinc-400">+{item.items.length - 1} more items</span>}
+                        </div>
+                      ) : 'N/A'}
+                    </td>
+                    <td className="py-4 text-sm font-black text-zinc-900 text-right">
+                      {item.items?.reduce((sum, i) => sum + i.quantity, 0) || 0}
+                    </td>
                     <td className="py-4 text-xs text-zinc-500">{item.dateTime}</td>
                   </tr>
                 ))}
@@ -2170,13 +2290,17 @@ const ItemModal = ({ onClose, onSave, initialData }: { onClose: () => void, onSa
     category: 'General',
     unitType: 'Piece',
     weight: 0,
-    volume: 0
+    volume: 0,
+    modelNumber: '',
+    shortDescription: '',
+    mfgDate: '',
+    expiryDate: ''
   });
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
-        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50 sticky top-0 z-10">
           <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">{initialData ? 'Edit Item' : 'Add New Item'}</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
         </div>
@@ -2193,6 +2317,26 @@ const ItemModal = ({ onClose, onSave, initialData }: { onClose: () => void, onSa
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Category</label>
               <input type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Model Number</label>
+              <input type="text" value={formData.modelNumber} onChange={e => setFormData({...formData, modelNumber: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Short Description</label>
+              <input type="text" value={formData.shortDescription} onChange={e => setFormData({...formData, shortDescription: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">MFG Date</label>
+              <input type="date" value={formData.mfgDate} onChange={e => setFormData({...formData, mfgDate: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Expiry Date</label>
+              <input type="date" value={formData.expiryDate} onChange={e => setFormData({...formData, expiryDate: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
@@ -2223,31 +2367,116 @@ const ItemModal = ({ onClose, onSave, initialData }: { onClose: () => void, onSa
   );
 };
 
+const StockAdjustmentModal = ({ onClose, onSave, item }: { onClose: () => void, onSave: (type: 'DAMAGED' | 'EXPIRED' | 'MISSING' | 'RETURN', quantity: number) => void, item: InventoryRecord }) => {
+  const [type, setType] = useState<'DAMAGED' | 'EXPIRED' | 'MISSING' | 'RETURN'>('DAMAGED');
+  const [quantity, setQuantity] = useState(1);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-sm w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+          <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Stock Adjustment</h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-zinc-500">Adjusting stock for <span className="font-bold text-zinc-900">{item.itemName}</span></p>
+          <div>
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Adjustment Type</label>
+            <select value={type} onChange={e => setType(e.target.value as any)} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none">
+              <option value="DAMAGED">Damaged</option>
+              <option value="EXPIRED">Expired</option>
+              <option value="MISSING">Missing</option>
+              <option value="RETURN">Return Item</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity</label>
+            <input 
+              type="number" 
+              value={quantity} 
+              onChange={e => setQuantity(Math.max(1, Number(e.target.value)))} 
+              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" 
+              max={type === 'RETURN' ? undefined : item.quantity}
+            />
+            {type !== 'RETURN' && <p className="text-[10px] text-zinc-400 mt-1">Available: {item.quantity}</p>}
+          </div>
+          <div className="pt-4 flex justify-end gap-3">
+            <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900">Cancel</button>
+            <button onClick={() => onSave(type, quantity)} className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors">Confirm</button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses }: { onClose: () => void, onSave: (r: InwardGoods) => void, initialData?: InwardGoods, items: ItemMaster[], vendors: VendorContract[], warehouses: Warehouse[] }) => {
   const [formData, setFormData] = useState<Partial<InwardGoods>>(initialData || {
     grnNo: `GRN${Math.floor(Math.random() * 100000).toString().padStart(5, '0')}`,
     vendorId: vendors[0]?.vendorId || '',
     vendorName: vendors[0]?.vendorName || '',
+    items: [],
+    warehouse: warehouses[0]?.name || 'Delhi Hub',
+    dateTime: format(new Date(), 'yyyy-MM-dd HH:mm'),
+    status: 'GRN',
+    lrNumber: '',
+    courierName: '',
+    courierDetails: '',
+    trackingNumber: '',
+    thirdPartyCourier: '',
+    thirdPartyTracking: ''
+  });
+
+  const [currentItem, setCurrentItem] = useState<Partial<InwardItem>>({
     itemId: items[0]?.id || '',
     itemName: items[0]?.name || '',
     quantity: 0,
     weight: 0,
     volume: 0,
-    warehouse: warehouses[0]?.name || 'Delhi Hub',
     storageLocation: 'Rack A1',
-    dateTime: format(new Date(), 'yyyy-MM-dd HH:mm'),
-    status: 'GRN'
+    shortDescription: items[0]?.shortDescription || ''
   });
+
+  const addItem = () => {
+    if (!currentItem.itemId || currentItem.quantity! <= 0) return;
+    const item = items.find(i => i.id === currentItem.itemId);
+    setFormData({
+      ...formData,
+      items: [...(formData.items || []), {
+        ...currentItem as InwardItem,
+        itemName: item?.name || '',
+        modelNumber: item?.modelNumber,
+        shortDescription: item?.shortDescription
+      }]
+    });
+    setCurrentItem({
+      itemId: items[0]?.id || '',
+      itemName: items[0]?.name || '',
+      quantity: 0,
+      weight: 0,
+      volume: 0,
+      storageLocation: 'Rack A1',
+      shortDescription: items[0]?.shortDescription || ''
+    });
+  };
+
+  const removeItem = (index: number) => {
+    setFormData({
+      ...formData,
+      items: formData.items?.filter((_, i) => i !== index)
+    });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-4xl w-full overflow-hidden max-h-[90vh] flex flex-col">
         <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
           <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">{initialData ? 'Edit GRN' : 'New Goods Receipt Note (GRN)'}</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
         </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="p-6 space-y-6 overflow-y-auto">
+          {/* Header Info */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Vendor</label>
               <select 
@@ -2262,25 +2491,6 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses }: 
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Item</label>
-              <select 
-                value={formData.itemId} 
-                onChange={e => {
-                  const i = items.find(i => i.id === e.target.value);
-                  setFormData({...formData, itemId: e.target.value, itemName: i?.name || ''});
-                }} 
-                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
-              >
-                {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity</label>
-              <input type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
-            </div>
-            <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Warehouse</label>
               <select 
                 value={formData.warehouse} 
@@ -2290,73 +2500,329 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses }: 
                 {warehouses.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
               </select>
             </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">LR Number</label>
+              <input type="text" value={formData.lrNumber} onChange={e => setFormData({...formData, lrNumber: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="Lorry Receipt #" />
+            </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Storage Location</label>
-            <input type="text" value={formData.storageLocation} onChange={e => setFormData({...formData, storageLocation: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Courier Name</label>
+              <input type="text" value={formData.courierName} onChange={e => setFormData({...formData, courierName: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="e.g. BlueDart" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Courier Details</label>
+              <input type="text" value={formData.courierDetails} onChange={e => setFormData({...formData, courierDetails: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="Contact/Vehicle info" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Tracking Number</label>
+              <input type="text" value={formData.trackingNumber} onChange={e => setFormData({...formData, trackingNumber: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="Order Tracking #" />
+            </div>
           </div>
-          <div className="pt-4 flex justify-end gap-3">
-            <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900">Cancel</button>
-            <button onClick={() => onSave(formData as InwardGoods)} className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors">Generate GRN</button>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Third Party Courier</label>
+              <input type="text" value={formData.thirdPartyCourier} onChange={e => setFormData({...formData, thirdPartyCourier: e.target.value})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" placeholder="If not registered" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Third Party Tracking</label>
+              <input type="text" value={formData.thirdPartyTracking} onChange={e => setFormData({...formData, thirdPartyTracking: e.target.value})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" />
+            </div>
           </div>
+
+          {/* Item Entry */}
+          <div className="p-4 border border-dashed border-zinc-200 rounded-xl space-y-4">
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Add Items to GRN</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Item</label>
+                <select 
+                  value={currentItem.itemId} 
+                  onChange={e => {
+                    const i = items.find(i => i.id === e.target.value);
+                    setCurrentItem({
+                      ...currentItem, 
+                      itemId: e.target.value, 
+                      itemName: i?.name || '',
+                      shortDescription: i?.shortDescription || ''
+                    });
+                  }} 
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none"
+                >
+                  {items.map(i => <option key={i.id} value={i.id}>{i.name} ({i.sku})</option>)}
+                </select>
+                {currentItem.itemId && (
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <span className="text-[9px] font-bold bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-500 uppercase">Model: {items.find(i => i.id === currentItem.itemId)?.modelNumber || 'N/A'}</span>
+                    <span className="text-[9px] font-bold bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-500 uppercase">Unit: {items.find(i => i.id === currentItem.itemId)?.unitType}</span>
+                    <span className="text-[9px] font-bold bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-500 uppercase truncate max-w-[200px]">Desc: {currentItem.shortDescription || 'N/A'}</span>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity ({items.find(i => i.id === currentItem.itemId)?.unitType || 'Units'})</label>
+                <input type="number" value={currentItem.quantity} onChange={e => setCurrentItem({...currentItem, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Location</label>
+                <input type="text" value={currentItem.storageLocation} onChange={e => setCurrentItem({...currentItem, storageLocation: e.target.value})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={addItem} className="px-4 py-2 bg-zinc-900 text-white text-[10px] font-bold rounded-lg uppercase tracking-wider flex items-center gap-2">
+                <Plus size={14} /> Add Item
+              </button>
+            </div>
+          </div>
+
+          {/* Items List */}
+          {formData.items && formData.items.length > 0 && (
+            <div className="border border-zinc-100 rounded-xl overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-zinc-50">
+                  <tr>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase">Item / Description</th>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase">Model</th>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase">Qty</th>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase">Location</th>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {formData.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-zinc-900">{item.itemName}</span>
+                          <span className="text-[9px] text-zinc-400 italic">{item.shortDescription}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-zinc-500">{item.modelNumber || 'N/A'}</td>
+                      <td className="px-4 py-3 text-xs font-black text-zinc-900">{item.quantity}</td>
+                      <td className="px-4 py-3 text-xs text-zinc-600">{item.storageLocation}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={() => removeItem(idx)} className="text-rose-500 hover:text-rose-700"><X size={14} /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <div className="p-6 border-t border-zinc-100 flex justify-end gap-3 bg-zinc-50">
+          <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900">Cancel</button>
+          <button 
+            onClick={() => onSave(formData as InwardGoods)} 
+            disabled={!formData.items || formData.items.length === 0}
+            className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50"
+          >
+            Generate GRN
+          </button>
         </div>
       </motion.div>
     </div>
   );
 };
 
-const DispatchModal = ({ onClose, onSave, initialData, items }: { onClose: () => void, onSave: (r: OutwardGoods) => void, initialData?: OutwardGoods, items: ItemMaster[] }) => {
+const DispatchModal = ({ onClose, onSave, initialData, items, vendors }: { onClose: () => void, onSave: (r: OutwardGoods) => void, initialData?: OutwardGoods, items: ItemMaster[], vendors: VendorContract[] }) => {
   const [formData, setFormData] = useState<Partial<OutwardGoods>>(initialData || {
     dispatchOrderId: `DO${Math.floor(Math.random() * 100000).toString().padStart(5, '0')}`,
+    vendorId: vendors[0]?.vendorId || '',
+    vendorName: vendors[0]?.vendorName || '',
+    items: [],
+    destination: '',
+    vehicleDetails: '',
+    dateTime: format(new Date(), 'yyyy-MM-dd HH:mm'),
+    status: 'Requested',
+    lrNumber: '',
+    courierName: '',
+    courierDetails: '',
+    trackingNumber: '',
+    thirdPartyCourier: '',
+    thirdPartyTracking: ''
+  });
+
+  const [currentItem, setCurrentItem] = useState<Partial<OutwardItem>>({
     itemId: items[0]?.id || '',
     itemName: items[0]?.name || '',
     quantity: 0,
     weight: 0,
-    destination: '',
-    vehicleDetails: '',
-    dateTime: format(new Date(), 'yyyy-MM-dd HH:mm'),
-    status: 'Requested'
+    shortDescription: items[0]?.shortDescription || ''
   });
+
+  const addItem = () => {
+    if (!currentItem.itemId || currentItem.quantity! <= 0) return;
+    const item = items.find(i => i.id === currentItem.itemId);
+    setFormData({
+      ...formData,
+      items: [...(formData.items || []), {
+        ...currentItem as OutwardItem,
+        itemName: item?.name || '',
+        modelNumber: item?.modelNumber,
+        shortDescription: item?.shortDescription
+      }]
+    });
+    setCurrentItem({
+      itemId: items[0]?.id || '',
+      itemName: items[0]?.name || '',
+      quantity: 0,
+      weight: 0,
+      shortDescription: items[0]?.shortDescription || ''
+    });
+  };
+
+  const removeItem = (index: number) => {
+    setFormData({
+      ...formData,
+      items: formData.items?.filter((_, i) => i !== index)
+    });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-4xl w-full overflow-hidden max-h-[90vh] flex flex-col">
         <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
           <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">{initialData ? 'Edit Dispatch' : 'New Dispatch Order'}</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
         </div>
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Item to Dispatch</label>
-            <select 
-              value={formData.itemId} 
-              onChange={e => {
-                const i = items.find(i => i.id === e.target.value);
-                setFormData({...formData, itemId: e.target.value, itemName: i?.name || ''});
-              }} 
-              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
-            >
-              {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+        <div className="p-6 space-y-6 overflow-y-auto">
+          {/* Header Info */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity</label>
-              <input type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Vendor</label>
+              <select 
+                value={formData.vendorId} 
+                onChange={e => {
+                  const v = vendors.find(v => v.vendorId === e.target.value);
+                  setFormData({...formData, vendorId: e.target.value, vendorName: v?.vendorName || ''});
+                }} 
+                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
+              >
+                {vendors.map(v => <option key={v.vendorId} value={v.vendorId}>{v.vendorName}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Destination</label>
               <input type="text" value={formData.destination} onChange={e => setFormData({...formData, destination: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="e.g. Retail Store" />
             </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Vehicle Details</label>
+              <input type="text" value={formData.vehicleDetails} onChange={e => setFormData({...formData, vehicleDetails: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="e.g. KA-01-MH-1234" />
+            </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Vehicle Details</label>
-            <input type="text" value={formData.vehicleDetails} onChange={e => setFormData({...formData, vehicleDetails: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="e.g. KA-01-MH-1234" />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">LR Number</label>
+              <input type="text" value={formData.lrNumber} onChange={e => setFormData({...formData, lrNumber: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="Lorry Receipt #" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Courier Name</label>
+              <input type="text" value={formData.courierName} onChange={e => setFormData({...formData, courierName: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="e.g. BlueDart" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Tracking Number</label>
+              <input type="text" value={formData.trackingNumber} onChange={e => setFormData({...formData, trackingNumber: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" placeholder="Order Tracking #" />
+            </div>
           </div>
-          <div className="pt-4 flex justify-end gap-3">
-            <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900">Cancel</button>
-            <button onClick={() => onSave(formData as OutwardGoods)} className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors">Create Dispatch</button>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Third Party Courier</label>
+              <input type="text" value={formData.thirdPartyCourier} onChange={e => setFormData({...formData, thirdPartyCourier: e.target.value})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" placeholder="If not registered" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Third Party Tracking</label>
+              <input type="text" value={formData.thirdPartyTracking} onChange={e => setFormData({...formData, thirdPartyTracking: e.target.value})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" />
+            </div>
           </div>
+
+          {/* Item Entry */}
+          <div className="p-4 border border-dashed border-zinc-200 rounded-xl space-y-4">
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Add Items to Dispatch</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Item</label>
+                <select 
+                  value={currentItem.itemId} 
+                  onChange={e => {
+                    const i = items.find(i => i.id === e.target.value);
+                    setCurrentItem({
+                      ...currentItem, 
+                      itemId: e.target.value, 
+                      itemName: i?.name || '',
+                      shortDescription: i?.shortDescription || ''
+                    });
+                  }} 
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none"
+                >
+                  {items.map(i => <option key={i.id} value={i.id}>{i.name} ({i.sku})</option>)}
+                </select>
+                {currentItem.itemId && (
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <span className="text-[9px] font-bold bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-500 uppercase">Model: {items.find(i => i.id === currentItem.itemId)?.modelNumber || 'N/A'}</span>
+                    <span className="text-[9px] font-bold bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-500 uppercase">Unit: {items.find(i => i.id === currentItem.itemId)?.unitType}</span>
+                    <span className="text-[9px] font-bold bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-500 uppercase truncate max-w-[200px]">Desc: {currentItem.shortDescription || 'N/A'}</span>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity ({items.find(i => i.id === currentItem.itemId)?.unitType || 'Units'})</label>
+                <input type="number" value={currentItem.quantity} onChange={e => setCurrentItem({...currentItem, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={addItem} className="px-4 py-2 bg-zinc-900 text-white text-[10px] font-bold rounded-lg uppercase tracking-wider flex items-center gap-2">
+                <Plus size={14} /> Add Item
+              </button>
+            </div>
+          </div>
+
+          {/* Items List */}
+          {formData.items && formData.items.length > 0 && (
+            <div className="border border-zinc-100 rounded-xl overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-zinc-50">
+                  <tr>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase">Item / Description</th>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase">Model</th>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase">Qty</th>
+                    <th className="px-4 py-2 text-[10px] font-bold text-zinc-400 uppercase text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-50">
+                  {formData.items.map((item, idx) => (
+                    <tr key={idx}>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-zinc-900">{item.itemName}</span>
+                          <span className="text-[9px] text-zinc-400 italic">{item.shortDescription}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-zinc-500">{item.modelNumber || 'N/A'}</td>
+                      <td className="px-4 py-3 text-xs font-black text-zinc-900">{item.quantity}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={() => removeItem(idx)} className="text-rose-500 hover:text-rose-700"><X size={14} /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <div className="p-6 border-t border-zinc-100 flex justify-end gap-3 bg-zinc-50">
+          <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900">Cancel</button>
+          <button 
+            onClick={() => onSave(formData as OutwardGoods)} 
+            disabled={!formData.items || formData.items.length === 0}
+            className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50"
+          >
+            Create Dispatch
+          </button>
         </div>
       </motion.div>
     </div>
@@ -2800,6 +3266,78 @@ const WarehousesView = ({
   );
 };
 
+const ReturnModal = ({ onClose, onSave, items, vendors, warehouses }: { onClose: () => void, onSave: (r: any) => void, items: ItemMaster[], vendors: VendorContract[], warehouses: Warehouse[] }) => {
+  const [formData, setFormData] = useState({
+    itemId: items[0]?.id || '',
+    quantity: 0,
+    reason: '',
+    vendorId: vendors[0]?.vendorId || '',
+    warehouse: warehouses[0]?.name || ''
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+          <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider italic">Return Damaged Product</h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Item to Return</label>
+            <select 
+              value={formData.itemId} 
+              onChange={e => setFormData({...formData, itemId: e.target.value})} 
+              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
+            >
+              {items.map(i => <option key={i.id} value={i.id}>{i.name} ({i.sku})</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity ({items.find(i => i.id === formData.itemId)?.unitType || 'Units'})</label>
+              <input type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Warehouse</label>
+              <select 
+                value={formData.warehouse} 
+                onChange={e => setFormData({...formData, warehouse: e.target.value})} 
+                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
+              >
+                {warehouses.map(w => <option key={w.id} value={w.name}>{w.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Vendor</label>
+            <select 
+              value={formData.vendorId} 
+              onChange={e => setFormData({...formData, vendorId: e.target.value})} 
+              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
+            >
+              {vendors.map(v => <option key={v.vendorId} value={v.vendorId}>{v.vendorName}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Reason for Return</label>
+            <textarea 
+              value={formData.reason} 
+              onChange={e => setFormData({...formData, reason: e.target.value})} 
+              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none h-24 resize-none"
+              placeholder="Describe the damage..."
+            />
+          </div>
+          <div className="pt-4 flex justify-end gap-3">
+            <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900">Cancel</button>
+            <button onClick={() => onSave(formData)} className="px-6 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors">Process Return</button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const WarehouseModal = ({ onClose, onSave, initialData }: { onClose: () => void, onSave: (w: Warehouse) => void, initialData?: Warehouse }) => {
   const [formData, setFormData] = useState<Warehouse>(initialData || {
     id: `WH${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
@@ -2897,6 +3435,106 @@ const WarehouseModal = ({ onClose, onSave, initialData }: { onClose: () => void,
           </button>
         </div>
       </motion.div>
+    </div>
+  );
+};
+
+const SQLEditorView = () => {
+  const [query, setQuery] = useState('SELECT * FROM items LIMIT 10;');
+  const [result, setResult] = useState<any[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleRunQuery = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/sql', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setResult(Array.isArray(data) ? data : [data]);
+      } else {
+        setError(data.error || 'Failed to execute query');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-black text-zinc-900 uppercase tracking-tight italic">SQL Editor</h2>
+          <p className="text-xs text-zinc-500 mt-1">Direct database access for advanced management</p>
+        </div>
+        <button 
+          onClick={handleRunQuery}
+          disabled={loading}
+          className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg flex items-center gap-2 hover:bg-zinc-800 transition-all disabled:opacity-50"
+        >
+          {loading ? <Activity size={14} className="animate-spin" /> : <Database size={14} />}
+          Run Query
+        </button>
+      </div>
+
+      <Card className="p-0 overflow-hidden">
+        <textarea 
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full h-48 p-6 font-mono text-sm bg-zinc-900 text-emerald-400 outline-none resize-none"
+          placeholder="Enter SQL query here..."
+        />
+      </Card>
+
+      {error && (
+        <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 text-sm font-medium">
+          <AlertCircle size={18} />
+          {error}
+        </div>
+      )}
+
+      {result && (
+        <Card title="Query Result" subtitle={`${result.length || 0} rows returned`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-full">
+              <thead>
+                <tr className="border-b border-zinc-100">
+                  {result.length > 0 && typeof result[0] === 'object' && result[0] !== null && Object.keys(result[0]).map(key => (
+                    <th key={key} className="pb-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-4 whitespace-nowrap">{key}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {result.map((row, i) => (
+                  <tr key={i} className="border-b border-zinc-50 hover:bg-zinc-50/50 transition-colors">
+                    {typeof row === 'object' && row !== null ? Object.values(row).map((val: any, j) => (
+                      <td key={j} className="py-4 text-xs text-zinc-600 px-4 font-medium whitespace-nowrap">
+                        {val === null ? <span className="text-zinc-300 italic">null</span> : String(val)}
+                      </td>
+                    )) : (
+                      <td className="py-4 text-xs text-zinc-600 px-4 font-medium">
+                        {String(row)}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {result.length === 0 && (
+              <div className="py-12 text-center">
+                <p className="text-zinc-400 text-sm">Query executed successfully but returned no data.</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 };
@@ -3028,7 +3666,7 @@ const CustomerPortal = ({
 
   const vendorInventory = inventory.filter(i => i.vendorId === user.vendorId);
   const vendorInward = inward.filter(i => i.vendorId === user.vendorId);
-  const vendorOutward = outward.filter(i => i.itemId && vendorInventory.some(inv => inv.itemId === i.itemId)); // Simplified outward filtering
+  const vendorOutward = outward.filter(o => o.vendorId === user.vendorId);
   const vendorInvoices = invoices.filter(i => i.vendorId === user.vendorId);
   const vendorPayments = payments.filter(p => p.vendorId === user.vendorId);
   const vendorContract = contracts.find(c => c.vendorId === user.vendorId);
@@ -3164,11 +3802,16 @@ const CustomerPortal = ({
                       {vendorInward.slice(0, 5).map((item, idx) => (
                         <div key={idx} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
                           <div>
-                            <p className="text-sm font-bold text-zinc-900">{item.itemName}</p>
+                            <p className="text-sm font-bold text-zinc-900">
+                              {item.items?.[0]?.itemName || 'N/A'}
+                              {item.items?.length > 1 && <span className="text-[10px] text-zinc-400 ml-1">+{item.items.length - 1} more</span>}
+                            </p>
                             <p className="text-[10px] text-zinc-500 uppercase">{item.dateTime}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-black text-zinc-900">+{item.quantity}</p>
+                            <p className="text-sm font-black text-zinc-900">
+                              +{item.items?.reduce((sum, i) => sum + i.quantity, 0) || 0}
+                            </p>
                             <Badge variant="success">Stored</Badge>
                           </div>
                         </div>
@@ -3180,11 +3823,16 @@ const CustomerPortal = ({
                       {vendorOutward.slice(0, 5).map((item, idx) => (
                         <div key={idx} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
                           <div>
-                            <p className="text-sm font-bold text-zinc-900">{item.itemName}</p>
+                            <p className="text-sm font-bold text-zinc-900">
+                              {item.items?.[0]?.itemName || 'N/A'}
+                              {item.items?.length > 1 && <span className="text-[10px] text-zinc-400 ml-1">+{item.items.length - 1} more</span>}
+                            </p>
                             <p className="text-[10px] text-zinc-500 uppercase">{item.dateTime}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-black text-rose-600">-{item.quantity}</p>
+                            <p className="text-sm font-black text-rose-600">
+                              -{item.items?.reduce((sum, i) => sum + i.quantity, 0) || 0}
+                            </p>
                             <Badge variant="info">Dispatched</Badge>
                           </div>
                         </div>
@@ -3386,7 +4034,7 @@ const CustomerPortal = ({
               <ReportsView 
                 inventory={vendorInventory} 
                 inward={vendorInward} 
-                outward={outward.filter(o => o.itemId && vendorInventory.some(inv => inv.itemId === o.itemId))} 
+                outward={vendorOutward} 
                 invoices={vendorInvoices} 
                 utilization={MOCK_UTILIZATION.filter(u => u.warehouse === vendorContract?.warehouseLocation)}
                 contracts={contracts.filter(c => c.vendorId === user.vendorId)}
@@ -3435,7 +4083,7 @@ const CustomerPortal = ({
 // --- Main App ---
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'dashboard' | 'contracts' | 'inventory' | 'inward' | 'outward' | 'reports' | 'invoices' | 'payments' | 'ledger' | 'settings' | 'reminders' | 'barcode' | 'warehouses'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'contracts' | 'inventory' | 'inward' | 'outward' | 'reports' | 'invoices' | 'payments' | 'ledger' | 'settings' | 'reminders' | 'barcode' | 'warehouses' | 'sql'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [pricing, setPricing] = useState<PricingConfig[]>(MOCK_PRICING);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -3463,10 +4111,79 @@ export default function App() {
   const [showGateEntryModal, setShowGateEntryModal] = useState(false);
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [showStockAdjustmentModal, setShowStockAdjustmentModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
   
   // Edit States
   const [editingEntity, setEditingEntity] = useState<any>(null);
   const [viewingEntity, setViewingEntity] = useState<any>(null);
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryRecord | null>(null);
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const [itemsRes, inventoryRes, inwardRes, outwardRes] = await Promise.all([
+          fetch('/api/items'),
+          fetch('/api/inventory'),
+          fetch('/api/inward'),
+          fetch('/api/outward')
+        ]);
+
+        if (itemsRes.ok) {
+          const data = await itemsRes.json();
+          const mappedItems = data.map((item: any) => ({
+            id: item.id.toString(),
+            vendorId: item.vendor_id?.toString(),
+            name: item.name,
+            sku: item.sku,
+            category: item.category_name,
+            unitType: item.unit_type,
+            quantity: item.quantity,
+            minStock: item.min_stock_level,
+            location: item.location_name,
+            price: item.price,
+            modelNumber: item.model_number,
+            shortDescription: item.short_description,
+            mfgDate: item.mfg_date,
+            expiryDate: item.expiry_date
+          }));
+          setItems(mappedItems);
+        }
+
+        if (inventoryRes.ok) {
+          const data = await inventoryRes.json();
+          const mappedInventory = data.map((inv: any) => ({
+            itemId: inv.item_id.toString(),
+            itemName: inv.item_name,
+            vendorId: inv.vendor_id?.toString(),
+            vendorName: inv.vendor_name,
+            quantity: inv.quantity,
+            damagedQuantity: inv.damaged_quantity,
+            expiredQuantity: inv.expired_quantity,
+            missingQuantity: inv.missing_quantity,
+            location: inv.location_name,
+            warehouse: inv.warehouse_name,
+            agingDays: inv.aging_days || 0,
+            lastUpdated: inv.updated_at
+          }));
+          setInventory(mappedInventory);
+        }
+
+        if (inwardRes.ok) {
+          const data = await inwardRes.json();
+          setInwardRecords(data);
+        }
+
+        if (outwardRes.ok) {
+          const data = await outwardRes.json();
+          setOutwardRecords(data);
+        }
+      } catch (err) {
+        console.error("Database fetch failed, falling back to mock data:", err);
+      }
+    };
+    fetchInitialData();
+  }, []);
 
   const handleDelete = (type: string, id: string) => {
     if (!confirm('Are you sure you want to delete this record?')) return;
@@ -3537,6 +4254,56 @@ export default function App() {
     }
   };
 
+  const handleStockAdjustment = async (type: 'DAMAGED' | 'EXPIRED' | 'MISSING' | 'RETURN', quantity: number) => {
+    if (!selectedInventoryItem) return;
+
+    try {
+      const response = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: selectedInventoryItem.itemId,
+          type,
+          quantity,
+          vendorId: selectedInventoryItem.vendorId,
+          warehouse: selectedInventoryItem.warehouse,
+          location: selectedInventoryItem.location
+        })
+      });
+
+      if (response.ok) {
+        // Refresh inventory data
+        const invRes = await fetch('/api/inventory');
+        if (invRes.ok) {
+          const data = await invRes.json();
+          const mappedInventory = data.map((inv: any) => ({
+            itemId: inv.item_id.toString(),
+            itemName: inv.item_name,
+            vendorId: inv.vendor_id?.toString(),
+            vendorName: inv.vendor_name,
+            quantity: inv.quantity,
+            damagedQuantity: inv.damaged_quantity,
+            expiredQuantity: inv.expired_quantity,
+            missingQuantity: inv.missing_quantity,
+            location: inv.location_name,
+            warehouse: inv.warehouse_name,
+            agingDays: inv.aging_days || 0,
+            lastUpdated: inv.updated_at
+          }));
+          setInventory(mappedInventory);
+        }
+        setShowStockAdjustmentModal(false);
+        setSelectedInventoryItem(null);
+      } else {
+        const err = await response.json();
+        alert(err.error || "Failed to adjust stock");
+      }
+    } catch (err) {
+      console.error("Stock adjustment failed:", err);
+      alert("An error occurred while adjusting stock");
+    }
+  };
+
   const renderView = () => {
     switch(activeView) {
       case 'dashboard': return <DashboardView contracts={contracts} inventory={inventory} inward={inwardRecords} outward={outwardRecords} />;
@@ -3563,6 +4330,10 @@ export default function App() {
           onPrint={handlePrint}
           onExportExcel={() => handleExportExcel(items, 'inventory')}
           onExportPDF={handleExportPDF}
+          onStockAdjustment={(item) => {
+            setSelectedInventoryItem(item);
+            setShowStockAdjustmentModal(true);
+          }}
         />
       );
       case 'inward': return (
@@ -3578,9 +4349,21 @@ export default function App() {
           onPrint={handlePrint}
           onExportExcel={() => handleExportExcel(inwardRecords, 'inward_records')}
           onExportPDF={handleExportPDF}
-          onUpdateStatus={(id, status) => {
-            setInwardRecords(prev => prev.map(r => r.grnNo === id ? { ...r, status } : r));
+          onUpdateStatus={async (id, status) => {
+            try {
+              const response = await fetch(`/api/inward/${id}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status })
+              });
+              if (response.ok) {
+                setInwardRecords(prev => prev.map(r => r.grnNo === id ? { ...r, status } : r));
+              }
+            } catch (err) {
+              console.error("Update status failed:", err);
+            }
           }}
+          onProcessReturn={() => setShowReturnModal(true)}
         />
       );
       case 'outward': return (
@@ -3810,47 +4593,87 @@ export default function App() {
         {showItemModal && (
           <ItemModal 
             onClose={() => setShowItemModal(false)} 
-            onSave={(item) => {
-              if (editingEntity) {
-                setItems(prev => prev.map(i => i.id === item.id ? item : i));
-              } else {
-                setItems(prev => [...prev, item]);
+            onSave={async (item) => {
+              try {
+                const response = await fetch('/api/items', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(item)
+                });
+                if (response.ok) {
+                  // Refresh items
+                  const itemsRes = await fetch('/api/items');
+                  if (itemsRes.ok) {
+                    const data = await itemsRes.json();
+                    const mappedItems = data.map((i: any) => ({
+                      id: i.id.toString(),
+                      vendorId: i.vendor_id?.toString(),
+                      name: i.name,
+                      sku: i.sku,
+                      category: i.category_name,
+                      unitType: i.unit_type,
+                      quantity: i.quantity,
+                      minStock: i.min_stock_level,
+                      location: i.location_name,
+                      price: i.price,
+                      modelNumber: i.model_number,
+                      shortDescription: i.short_description,
+                      mfgDate: i.mfg_date,
+                      expiryDate: i.expiry_date
+                    }));
+                    setItems(mappedItems);
+                  }
+                  setShowItemModal(false);
+                } else {
+                  alert("Failed to save item");
+                }
+              } catch (err) {
+                console.error("Save item failed:", err);
+                alert("An error occurred while saving the item");
               }
-              setShowItemModal(false);
             }}
             initialData={editingEntity}
+          />
+        )}
+
+        {showStockAdjustmentModal && selectedInventoryItem && (
+          <StockAdjustmentModal 
+            onClose={() => {
+              setShowStockAdjustmentModal(false);
+              setSelectedInventoryItem(null);
+            }}
+            onSave={handleStockAdjustment}
+            item={selectedInventoryItem}
           />
         )}
 
         {showGRNModal && (
           <GRNModal 
             onClose={() => setShowGRNModal(false)} 
-            onSave={(record) => {
-              if (editingEntity) {
-                setInwardRecords(prev => prev.map(r => r.grnNo === record.grnNo ? record : r));
-              } else {
-                setInwardRecords(prev => [...prev, record]);
-                // Also update inventory
-                setInventory(prev => {
-                  const existing = prev.find(i => i.itemId === record.itemId && i.warehouse === record.warehouse);
-                  if (existing) {
-                    return prev.map(i => (i.itemId === record.itemId && i.warehouse === record.warehouse) ? { ...i, quantity: i.quantity + record.quantity } : i);
-                  } else {
-                    return [...prev, {
-                      itemId: record.itemId,
-                      itemName: record.itemName,
-                      vendorId: record.vendorId,
-                      vendorName: record.vendorName,
-                      quantity: record.quantity,
-                      location: record.storageLocation,
-                      warehouse: record.warehouse,
-                      lastUpdated: format(new Date(), 'yyyy-MM-dd'),
-                      agingDays: 0
-                    }];
-                  }
+            onSave={async (record) => {
+              try {
+                const response = await fetch('/api/inward', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(record)
                 });
+                if (response.ok) {
+                  // Refresh data
+                  const [inwardRes, invRes] = await Promise.all([
+                    fetch('/api/inward'),
+                    fetch('/api/inventory')
+                  ]);
+                  if (inwardRes.ok) setInwardRecords(await inwardRes.json());
+                  if (invRes.ok) setInventory(await invRes.json());
+                  setShowGRNModal(false);
+                } else {
+                  const err = await response.json();
+                  alert(err.error || "Failed to save GRN");
+                }
+              } catch (err) {
+                console.error("Save GRN failed:", err);
+                alert("An error occurred while saving the GRN");
               }
-              setShowGRNModal(false);
             }}
             initialData={editingEntity}
             items={items}
@@ -3862,18 +4685,88 @@ export default function App() {
         {showDispatchModal && (
           <DispatchModal 
             onClose={() => setShowDispatchModal(false)} 
-            onSave={(record) => {
-              if (editingEntity) {
-                setOutwardRecords(prev => prev.map(r => r.dispatchOrderId === record.dispatchOrderId ? record : r));
-              } else {
-                setOutwardRecords(prev => [...prev, record]);
-                // Update inventory
-                setInventory(prev => prev.map(i => i.itemId === record.itemId ? { ...i, quantity: Math.max(0, i.quantity - record.quantity) } : i));
+            onSave={async (record) => {
+              try {
+                const response = await fetch('/api/outward', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(record)
+                });
+                if (response.ok) {
+                  // Refresh data
+                  const [outwardRes, invRes] = await Promise.all([
+                    fetch('/api/outward'),
+                    fetch('/api/inventory')
+                  ]);
+                  if (outwardRes.ok) setOutwardRecords(await outwardRes.json());
+                  if (invRes.ok) setInventory(await invRes.json());
+                  setShowDispatchModal(false);
+                } else {
+                  const err = await response.json();
+                  alert(err.error || "Failed to create dispatch");
+                }
+              } catch (err) {
+                console.error("Dispatch failed:", err);
+                alert("An error occurred during dispatch");
               }
-              setShowDispatchModal(false);
             }}
             initialData={editingEntity}
             items={items}
+            vendors={contracts}
+          />
+        )}
+
+        {showReturnModal && (
+          <ReturnModal 
+            onClose={() => setShowReturnModal(false)}
+            onSave={async (record) => {
+              try {
+                const response = await fetch('/api/returns', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(record)
+                });
+                if (response.ok) {
+                  // Refresh data
+                  const [invRes, itemsRes] = await Promise.all([
+                    fetch('/api/inventory'),
+                    fetch('/api/items')
+                  ]);
+                  if (invRes.ok) setInventory(await invRes.json());
+                  if (itemsRes.ok) {
+                    const data = await itemsRes.json();
+                    const mappedItems = data.map((i: any) => ({
+                      id: i.id.toString(),
+                      vendorId: i.vendor_id?.toString(),
+                      name: i.name,
+                      sku: i.sku,
+                      category: i.category_name,
+                      unitType: i.unit_type,
+                      quantity: i.quantity,
+                      minStock: i.min_stock_level,
+                      location: i.location_name,
+                      price: i.price,
+                      modelNumber: i.model_number,
+                      shortDescription: i.short_description,
+                      mfgDate: i.mfg_date,
+                      expiryDate: i.expiry_date
+                    }));
+                    setItems(mappedItems);
+                  }
+                  setShowReturnModal(false);
+                  alert("Return processed successfully");
+                } else {
+                  const err = await response.json();
+                  alert(err.error || "Failed to process return");
+                }
+              } catch (err) {
+                console.error("Return failed:", err);
+                alert("An error occurred while processing return");
+              }
+            }}
+            items={items}
+            vendors={contracts}
+            warehouses={warehouses}
           />
         )}
 

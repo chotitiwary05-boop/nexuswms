@@ -118,7 +118,13 @@ The system follows a **Modular Monolith** architecture with a clear separation b
 ---
 
 ## 7. Deployment Architecture
-- **Environment**: Dockerized containers on AWS ECS/EKS.
-- **Database**: AWS RDS (MySQL) with Multi-AZ for high availability.
+- **Environment**: Dockerized containers on AWS ECS/EKS (or Google Cloud Run).
+- **Database**: AWS RDS (MySQL) or SQLite for local/small deployments.
 - **Load Balancer**: AWS ALB for traffic distribution.
 - **CDN**: CloudFront for frontend assets.
+
+### Deployment Notes for Vercel & Netlify
+If you deploy to Vercel or Netlify, you may encounter a **white screen** or **404 errors** because these platforms are primarily for static sites and do not run the custom Express server (`server.ts`) by default.
+- We have added `vercel.json` and `netlify.toml` to handle Single Page Application (SPA) routing, which should resolve the white screen issue on page refresh.
+- However, the **API features (SQL Editor, Database persistence)** will NOT work on these platforms unless you configure them as Serverless Functions or use a separate backend.
+- For full functionality, please use the provided Cloud Run deployment.
