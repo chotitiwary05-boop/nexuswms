@@ -285,38 +285,52 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Logging middleware
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+
   // API Routes
   
+  // Health Check
+  app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+
   // Dashboard Stats (Enterprise)
   app.get("/api/stats", (req, res) => {
-    const totalBranches = db.prepare("SELECT COUNT(*) as count FROM branches").get() as any;
-    const totalVendors = db.prepare("SELECT COUNT(*) as count FROM vendors").get() as any;
-    const totalInventory = db.prepare("SELECT SUM(quantity) as count FROM items").get() as any;
-    const monthlyRevenue = db.prepare("SELECT SUM(total_amount) as total FROM invoices WHERE created_at >= date('now', 'start of month')").get() as any;
-    
-    const branchUtilization = db.prepare(`
-      SELECT b.name, 
-             (SELECT SUM(occupied_capacity) FROM locations l JOIN zones z ON l.zone_id = z.id WHERE z.branch_id = b.id) as occupied,
-             (SELECT SUM(total_capacity) FROM locations l JOIN zones z ON l.zone_id = z.id WHERE z.branch_id = b.id) as total
-      FROM branches b
-    `).all();
+    try {
+      const totalBranches = db.prepare("SELECT COUNT(*) as count FROM branches").get() as any;
+      const totalVendors = db.prepare("SELECT COUNT(*) as count FROM vendors").get() as any;
+      const totalInventory = db.prepare("SELECT SUM(quantity) as count FROM items").get() as any;
+      const monthlyRevenue = db.prepare("SELECT SUM(total_amount) as total FROM invoices WHERE created_at >= date('now', 'start of month')").get() as any;
+      
+      const branchUtilization = db.prepare(`
+        SELECT b.name, 
+               (SELECT SUM(occupied_capacity) FROM locations l JOIN zones z ON l.zone_id = z.id WHERE z.branch_id = b.id) as occupied,
+               (SELECT SUM(total_capacity) FROM locations l JOIN zones z ON l.zone_id = z.id WHERE z.branch_id = b.id) as total
+        FROM branches b
+      `).all();
 
-    const recentTransactions = db.prepare(`
-      SELECT t.*, i.name as item_name, v.name as vendor_name
-      FROM transactions t 
-      JOIN items i ON t.item_id = i.id 
-      JOIN vendors v ON i.vendor_id = v.id
-      ORDER BY t.created_at DESC LIMIT 10
-    `).all();
+      const recentTransactions = db.prepare(`
+        SELECT t.*, i.name as item_name, v.name as vendor_name
+        FROM transactions t 
+        JOIN items i ON t.item_id = i.id 
+        JOIN vendors v ON i.vendor_id = v.id
+        ORDER BY t.created_at DESC LIMIT 10
+      `).all();
 
-    res.json({
-      totalBranches: totalBranches.count,
-      totalVendors: totalVendors.count,
-      totalInventory: totalInventory.count || 0,
-      monthlyRevenue: monthlyRevenue.total || 0,
-      branchUtilization,
-      recentTransactions
-    });
+      res.json({
+        totalBranches: totalBranches.count,
+        totalVendors: totalVendors.count,
+        totalInventory: totalInventory.count || 0,
+        monthlyRevenue: monthlyRevenue.total || 0,
+        branchUtilization,
+        recentTransactions
+      });
+    } catch (error) {
+      console.error("Error in /api/stats:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // Branches
@@ -330,18 +344,42 @@ async function startServer() {
   });
 
   // Inventory
+  app.get("/api/items", (req, res) => {
+    try {
+      const items = db.prepare(`
+        SELECT i.*, v.name as vendor_name, c.name as category_name, l.name as location_name, b.name as branch_name
+        FROM items i
+        JOIN vendors v ON i.vendor_id = v.id
+        LEFT JOIN categories c ON i.category_id = c.id
+        LEFT JOIN locations l ON i.location_id = l.id
+        LEFT JOIN zones z ON l.zone_id = z.id
+        LEFT JOIN branches b ON z.branch_id = b.id
+        ORDER BY i.updated_at DESC
+      `).all();
+      res.json(items);
+    } catch (error) {
+      console.error("Error in /api/items:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.get("/api/inventory", (req, res) => {
-    const items = db.prepare(`
-      SELECT i.*, v.name as vendor_name, c.name as category_name, l.name as location_name, b.name as branch_name
-      FROM items i
-      JOIN vendors v ON i.vendor_id = v.id
-      LEFT JOIN categories c ON i.category_id = c.id
-      LEFT JOIN locations l ON i.location_id = l.id
-      LEFT JOIN zones z ON l.zone_id = z.id
-      LEFT JOIN branches b ON z.branch_id = b.id
-      ORDER BY i.updated_at DESC
-    `).all();
-    res.json(items);
+    try {
+      const items = db.prepare(`
+        SELECT i.*, i.id as item_id, i.name as item_name, v.name as vendor_name, c.name as category_name, l.name as location_name, b.name as branch_name, b.name as warehouse_name
+        FROM items i
+        JOIN vendors v ON i.vendor_id = v.id
+        LEFT JOIN categories c ON i.category_id = c.id
+        LEFT JOIN locations l ON i.location_id = l.id
+        LEFT JOIN zones z ON l.zone_id = z.id
+        LEFT JOIN branches b ON z.branch_id = b.id
+        ORDER BY i.updated_at DESC
+      `).all();
+      res.json(items);
+    } catch (error) {
+      console.error("Error in /api/inventory:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   app.post("/api/items", (req, res) => {
@@ -542,47 +580,52 @@ async function startServer() {
 
   // Inward Goods (GRN)
   app.get("/api/inward", (req, res) => {
-    const records = db.prepare(`
-      SELECT ig.*, v.name as vendor_name
-      FROM inward_goods ig
-      JOIN vendors v ON ig.vendor_id = v.id
-      ORDER BY ig.date_time DESC
-    `).all() as any[];
+    try {
+      const records = db.prepare(`
+        SELECT ig.*, v.name as vendor_name
+        FROM inward_goods ig
+        JOIN vendors v ON ig.vendor_id = v.id
+        ORDER BY ig.date_time DESC
+      `).all() as any[];
 
-    const results = records.map(record => {
-      const items = db.prepare(`
-        SELECT ii.*, i.name as item_name, i.model_number, i.short_description
-        FROM inward_items ii
-        JOIN items i ON ii.item_id = i.id
-        WHERE ii.inward_id = ?
-      `).all(record.id);
-      return { 
-        grnNo: record.grn_no,
-        vendorId: record.vendor_id,
-        vendorName: record.vendor_name,
-        warehouse: record.warehouse,
-        dateTime: record.date_time,
-        status: record.status,
-        lrNumber: record.lr_number,
-        courierName: record.courier_name,
-        courierDetails: record.courier_details,
-        trackingNumber: record.tracking_number,
-        thirdPartyCourier: record.third_party_courier,
-        thirdPartyTracking: record.third_party_tracking,
-        items: items.map(i => ({
-          itemId: i.item_id,
-          itemName: i.item_name,
-          modelNumber: i.model_number,
-          shortDescription: i.short_description,
-          quantity: i.quantity,
-          weight: i.weight,
-          volume: i.volume,
-          storageLocation: i.storage_location
-        }))
-      };
-    });
+      const results = records.map(record => {
+        const items = db.prepare(`
+          SELECT ii.*, i.name as item_name, i.model_number, i.short_description
+          FROM inward_items ii
+          JOIN items i ON ii.item_id = i.id
+          WHERE ii.inward_id = ?
+        `).all(record.id);
+        return { 
+          grnNo: record.grn_no,
+          vendorId: record.vendor_id,
+          vendorName: record.vendor_name,
+          warehouse: record.warehouse,
+          dateTime: record.date_time,
+          status: record.status,
+          lrNumber: record.lr_number,
+          courierName: record.courier_name,
+          courierDetails: record.courier_details,
+          trackingNumber: record.tracking_number,
+          thirdPartyCourier: record.third_party_courier,
+          thirdPartyTracking: record.third_party_tracking,
+          items: items.map(i => ({
+            itemId: i.item_id,
+            itemName: i.item_name,
+            modelNumber: i.model_number,
+            shortDescription: i.short_description,
+            quantity: i.quantity,
+            weight: i.weight,
+            volume: i.volume,
+            storageLocation: i.storage_location
+          }))
+        };
+      });
 
-    res.json(results);
+      res.json(results);
+    } catch (error) {
+      console.error("Error in /api/inward:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   app.post("/api/inward", (req, res) => {
@@ -635,46 +678,51 @@ async function startServer() {
 
   // Outward Goods (Dispatch)
   app.get("/api/outward", (req, res) => {
-    const records = db.prepare(`
-      SELECT og.*, v.name as vendor_name
-      FROM outward_goods og
-      JOIN vendors v ON og.vendor_id = v.id
-      ORDER BY og.date_time DESC
-    `).all() as any[];
+    try {
+      const records = db.prepare(`
+        SELECT og.*, v.name as vendor_name
+        FROM outward_goods og
+        JOIN vendors v ON og.vendor_id = v.id
+        ORDER BY og.date_time DESC
+      `).all() as any[];
 
-    const results = records.map(record => {
-      const items = db.prepare(`
-        SELECT oi.*, i.name as item_name, i.model_number, i.short_description
-        FROM outward_items oi
-        JOIN items i ON oi.item_id = i.id
-        WHERE oi.outward_id = ?
-      `).all(record.id);
-      return { 
-        dispatchOrderId: record.dispatch_order_id,
-        vendorId: record.vendor_id,
-        vendorName: record.vendor_name,
-        destination: record.destination,
-        vehicleDetails: record.vehicle_details,
-        dateTime: record.date_time,
-        status: record.status,
-        lrNumber: record.lr_number,
-        courierName: record.courier_name,
-        courierDetails: record.courier_details,
-        trackingNumber: record.tracking_number,
-        thirdPartyCourier: record.third_party_courier,
-        thirdPartyTracking: record.third_party_tracking,
-        items: items.map(i => ({
-          itemId: i.item_id,
-          itemName: i.item_name,
-          modelNumber: i.model_number,
-          shortDescription: i.short_description,
-          quantity: i.quantity,
-          weight: i.weight
-        }))
-      };
-    });
+      const results = records.map(record => {
+        const items = db.prepare(`
+          SELECT oi.*, i.name as item_name, i.model_number, i.short_description
+          FROM outward_items oi
+          JOIN items i ON oi.item_id = i.id
+          WHERE oi.outward_id = ?
+        `).all(record.id);
+        return { 
+          dispatchOrderId: record.dispatch_order_id,
+          vendorId: record.vendor_id,
+          vendorName: record.vendor_name,
+          destination: record.destination,
+          vehicleDetails: record.vehicle_details,
+          dateTime: record.date_time,
+          status: record.status,
+          lrNumber: record.lr_number,
+          courierName: record.courier_name,
+          courierDetails: record.courier_details,
+          trackingNumber: record.tracking_number,
+          thirdPartyCourier: record.third_party_courier,
+          thirdPartyTracking: record.third_party_tracking,
+          items: items.map(i => ({
+            itemId: i.item_id,
+            itemName: i.item_name,
+            modelNumber: i.model_number,
+            shortDescription: i.short_description,
+            quantity: i.quantity,
+            weight: i.weight
+          }))
+        };
+      });
 
-    res.json(results);
+      res.json(results);
+    } catch (error) {
+      console.error("Error in /api/outward:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   app.post("/api/outward", (req, res) => {
@@ -868,20 +916,6 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.join(__dirname, "dist")));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
-    });
-  }
-
   // Damaged Product Returns
   app.post("/api/returns", (req, res) => {
     const { itemId, quantity, reason, vendorId, warehouse } = req.body;
@@ -936,6 +970,26 @@ async function startServer() {
       res.status(400).json({ error: err.message });
     }
   });
+
+  // Catch-all for API routes
+  app.all("/api/*", (req, res) => {
+    console.log(`404 API: ${req.method} ${req.url}`);
+    res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.join(__dirname, "dist")));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(__dirname, "dist", "index.html"));
+    });
+  }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

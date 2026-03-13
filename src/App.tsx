@@ -27,13 +27,14 @@ import {
   Settings,
   Settings2,
   X,
+  Printer,
   ChevronDown,
   Camera,
   LogOut,
   Bell,
   Upload,
   MessageSquare,
-  Barcode,
+  QrCode,
   Wrench,
   Database,
   FileUp,
@@ -41,7 +42,7 @@ import {
   ArrowUpRight,
   RotateCcw
 } from 'lucide-react';
-import BarcodeGenerator from 'react-barcode';
+import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BarChart, 
@@ -591,16 +592,23 @@ const ActionButtons = ({
   onView, 
   onPrint, 
   onExportExcel, 
-  onExportPDF 
+  onExportPDF,
+  onQRCode
 }: { 
   onEdit?: () => void, 
   onDelete?: () => void, 
   onView?: () => void, 
   onPrint?: () => void, 
   onExportExcel?: () => void, 
-  onExportPDF?: () => void 
+  onExportPDF?: () => void,
+  onQRCode?: () => void
 }) => (
   <div className="flex items-center gap-1">
+    {onQRCode && (
+      <button onClick={onQRCode} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors" title="QR Code">
+        <QrCode size={14} />
+      </button>
+    )}
     {onView && (
       <button onClick={onView} className="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="View">
         <Search size={14} />
@@ -619,7 +627,7 @@ const ActionButtons = ({
     <div className="w-px h-4 bg-zinc-200 mx-1" />
     {onPrint && (
       <button onClick={onPrint} className="p-1.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors" title="Print">
-        <FileText size={14} />
+        <Printer size={14} />
       </button>
     )}
     {onExportExcel && (
@@ -648,6 +656,7 @@ const DashboardView = ({
   inward: InwardGoods[], 
   outward: OutwardGoods[] 
 }) => {
+  const [showQRScanner, setShowQRScanner] = useState(false);
   const util = MOCK_UTILIZATION[0];
   const totalInventory = inventory.reduce((sum, item) => sum + item.quantity, 0);
   const occupiedSpace = contracts.reduce((sum, c) => sum + c.allocatedSpace, 0);
@@ -775,6 +784,13 @@ const DashboardView = ({
         <div className="space-y-6">
           <Card title="Quick Actions">
             <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => setShowQRScanner(true)}
+                className="p-4 bg-zinc-900 text-white border border-zinc-900 rounded-xl hover:bg-zinc-800 transition-colors text-center col-span-2 flex items-center justify-center gap-2"
+              >
+                <QrCode size={20} />
+                <span className="text-[10px] font-bold uppercase">Quick Scan QR</span>
+              </button>
               <button className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl hover:bg-zinc-100 transition-colors text-center">
                 <Plus size={20} className="mx-auto mb-2 text-zinc-900" />
                 <span className="text-[10px] font-bold uppercase">New GRN</span>
@@ -795,6 +811,46 @@ const DashboardView = ({
           </Card>
         </div>
       </div>
+
+      {showQRScanner && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl overflow-hidden max-w-lg w-full shadow-2xl">
+            <div className="p-8 flex flex-col items-center text-center">
+              <div className="w-20 h-20 bg-zinc-100 rounded-2xl flex items-center justify-center text-zinc-900 mb-6">
+                <QrCode size={40} />
+              </div>
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter">QR Scanner Provision</h3>
+              <p className="text-sm text-zinc-500 mt-2 mb-8">This module will interface with the device camera to scan and parse WMS QR codes.</p>
+              
+              <div className="w-full aspect-square bg-zinc-900 rounded-2xl relative overflow-hidden mb-8 border-4 border-zinc-100">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-48 h-48 border-2 border-emerald-400/50 rounded-3xl relative">
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-400 rounded-tl-xl" />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-emerald-400 rounded-tr-xl" />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-emerald-400 rounded-bl-xl" />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-400 rounded-br-xl" />
+                    <motion.div 
+                      animate={{ top: ['10%', '90%', '10%'] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      className="absolute left-0 right-0 h-0.5 bg-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.8)]" 
+                    />
+                  </div>
+                </div>
+                <p className="absolute bottom-6 left-0 right-0 text-[10px] font-bold text-white/50 uppercase tracking-widest">Align QR code within frame</p>
+              </div>
+
+              <div className="flex gap-4 w-full">
+                <button onClick={() => setShowQRScanner(false)} className="flex-1 py-3 bg-zinc-100 text-zinc-900 text-xs font-bold rounded-xl hover:bg-zinc-200 transition-colors">
+                  Cancel
+                </button>
+                <button className="flex-1 py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-colors">
+                  Manual Entry
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
@@ -885,7 +941,8 @@ const InventoryView = ({
   onPrint,
   onExportExcel,
   onExportPDF,
-  onStockAdjustment
+  onStockAdjustment,
+  setActiveView
 }: { 
   inventory: InventoryRecord[], 
   items: ItemMaster[], 
@@ -896,7 +953,8 @@ const InventoryView = ({
   onPrint: () => void,
   onExportExcel: () => void,
   onExportPDF: () => void,
-  onStockAdjustment: (item: InventoryRecord) => void
+  onStockAdjustment: (item: InventoryRecord) => void,
+  setActiveView: (view: string) => void
 }) => {
   const [tab, setTab] = useState<'master' | 'tracking'>('tracking');
 
@@ -968,6 +1026,7 @@ const InventoryView = ({
                           onPrint={onPrint}
                           onExportExcel={onExportExcel}
                           onExportPDF={onExportPDF}
+                          onQRCode={() => setActiveView('qrcodes')}
                         />
                       </div>
                     </td>
@@ -1008,6 +1067,7 @@ const InventoryView = ({
                         onPrint={onPrint}
                         onExportExcel={onExportExcel}
                         onExportPDF={onExportPDF}
+                        onQRCode={() => setActiveView('qrcodes')}
                       />
                     </td>
                   </tr>
@@ -1044,7 +1104,7 @@ const InwardView = ({
   onEdit: (r: InwardGoods) => void, 
   onDelete: (id: string) => void, 
   onView: (r: InwardGoods) => void, 
-  onPrint: () => void, 
+  onPrint: (r: InwardGoods) => void, 
   onExportExcel: () => void, 
   onExportPDF: () => void,
   onUpdateStatus: (id: string, status: InwardGoods['status']) => void,
@@ -1141,7 +1201,7 @@ const InwardView = ({
                     onEdit={() => onEdit(item)} 
                     onDelete={() => onDelete(item.grnNo)} 
                     onView={() => onView(item)}
-                    onPrint={onPrint}
+                    onPrint={() => onPrint(item)}
                     onExportExcel={onExportExcel}
                     onExportPDF={onExportPDF}
                   />
@@ -1170,7 +1230,7 @@ const OutwardView = ({
   onEdit: (r: OutwardGoods) => void, 
   onDelete: (id: string) => void, 
   onView: (r: OutwardGoods) => void, 
-  onPrint: () => void, 
+  onPrint: (r: OutwardGoods) => void, 
   onExportExcel: () => void, 
   onExportPDF: () => void 
 }) => (
@@ -1211,7 +1271,7 @@ const OutwardView = ({
                   onEdit={() => onEdit(item)} 
                   onDelete={() => onDelete(item.dispatchOrderId)} 
                   onView={() => onView(item)}
-                  onPrint={onPrint}
+                  onPrint={() => onPrint(item)}
                   onExportExcel={onExportExcel}
                   onExportPDF={onExportPDF}
                 />
@@ -1798,29 +1858,29 @@ const RemindersView = ({ invoices, contracts, onSendReminder }: { invoices: Invo
   );
 };
 
-const BarcodeView = ({ items }: { items: ItemMaster[] }) => {
+const QRCodeView = ({ items }: { items: ItemMaster[] }) => {
   const [selectedItem, setSelectedItem] = useState<ItemMaster | null>(null);
   const [header, setHeader] = useState('Nexus WMS');
   const [line2, setLine2] = useState('Premium Quality');
   const [qty, setQty] = useState(1);
-  const [barcodeList, setBarcodeList] = useState<{ item: ItemMaster, qty: number, header: string, line2: string }[]>([]);
+  const [qrList, setQrList] = useState<{ item: ItemMaster, qty: number, header: string, line2: string }[]>([]);
 
-  const addToBarcodeList = () => {
+  const addToQrList = () => {
     if (selectedItem) {
-      setBarcodeList([...barcodeList, { item: selectedItem, qty, header, line2 }]);
+      setQrList([...qrList, { item: selectedItem, qty, header, line2 }]);
       setSelectedItem(null);
       setQty(1);
     }
   };
 
   const removeFromList = (idx: number) => {
-    setBarcodeList(barcodeList.filter((_, i) => i !== idx));
+    setQrList(qrList.filter((_, i) => i !== idx));
   };
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-1" title="Barcode Settings">
+        <Card className="lg:col-span-1" title="QR Code Settings">
           <div className="space-y-4">
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Header Text</label>
@@ -1869,42 +1929,43 @@ const BarcodeView = ({ items }: { items: ItemMaster[] }) => {
           </div>
         </Card>
 
-        <Card className="lg:col-span-2 flex flex-col items-center justify-center p-12" title="Barcode Preview">
+        <Card className="lg:col-span-2 flex flex-col items-center justify-center p-12" title="QR Code Preview">
           {selectedItem ? (
-            <div className="bg-white border-2 border-rose-600 rounded-xl p-8 shadow-sm flex flex-col items-center gap-4 max-w-sm w-full relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-full h-1 bg-rose-600"></div>
+            <div className="bg-white border-2 border-indigo-600 rounded-xl p-8 shadow-sm flex flex-col items-center gap-4 max-w-sm w-full relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-indigo-600"></div>
               <p className="text-lg font-bold text-zinc-900">{header}</p>
-              <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-100 flex flex-col items-center">
-                <div className="bg-white border border-zinc-200 p-2 flex flex-col items-center justify-center">
-                  <BarcodeGenerator value={selectedItem.id} width={1.5} height={60} fontSize={14} />
-                  <p className="text-[10px] font-mono mt-1">{selectedItem.id}</p>
+              <div className="bg-zinc-50 p-6 rounded-lg border border-zinc-100 flex flex-col items-center">
+                <div className="bg-white border border-zinc-200 p-4 flex flex-col items-center justify-center shadow-sm">
+                  <QRCodeSVG value={selectedItem.id} size={120} level="H" includeMargin={true} />
+                  <p className="text-[10px] font-mono mt-2 font-bold text-zinc-500">{selectedItem.id}</p>
                 </div>
               </div>
               <div className="text-center">
-                <p className="text-sm font-bold text-zinc-900">Sale Price: ₹{selectedItem.price || '0'}</p>
+                <p className="text-sm font-bold text-zinc-900">{selectedItem.name}</p>
+                <p className="text-sm font-bold text-indigo-600">Sale Price: ₹{selectedItem.price || '0'}</p>
                 <p className="text-[10px] text-zinc-500 uppercase font-bold">{line2}</p>
               </div>
               <button 
-                onClick={addToBarcodeList}
+                onClick={addToQrList}
                 className="w-full mt-4 flex items-center justify-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all"
               >
                 <Plus size={14} />
-                Add for Barcode
+                Add for QR Code
               </button>
             </div>
           ) : (
             <div className="text-center text-zinc-400">
-              <Barcode size={48} className="mx-auto mb-4 opacity-20" />
-              <p className="text-sm">Select an item to generate a barcode preview</p>
+              <QrCode size={48} className="mx-auto mb-4 opacity-20" />
+              <p className="text-sm">Select an item to generate a QR code preview</p>
             </div>
           )}
         </Card>
       </div>
 
-      <Card title="Barcode Print List" action={
+      <Card title="QR Code Print List" action={
         <button 
           onClick={() => window.print()}
-          disabled={barcodeList.length === 0}
+          disabled={qrList.length === 0}
           className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all disabled:opacity-50"
         >
           <Download size={14} />
@@ -1924,7 +1985,7 @@ const BarcodeView = ({ items }: { items: ItemMaster[] }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-50">
-              {barcodeList.map((entry, idx) => (
+              {qrList.map((entry, idx) => (
                 <tr key={idx} className="hover:bg-zinc-50 transition-colors">
                   <td className="py-4 text-sm font-bold text-zinc-900">{entry.item.name}</td>
                   <td className="py-4 text-sm font-mono text-zinc-600">{entry.item.id}</td>
@@ -1941,7 +2002,7 @@ const BarcodeView = ({ items }: { items: ItemMaster[] }) => {
                   </td>
                 </tr>
               ))}
-              {barcodeList.length === 0 && (
+              {qrList.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-zinc-400 text-sm italic">No items added to print list</td>
                 </tr>
@@ -2403,6 +2464,167 @@ const StockAdjustmentModal = ({ onClose, onSave, item }: { onClose: () => void, 
           <div className="pt-4 flex justify-end gap-3">
             <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900">Cancel</button>
             <button onClick={() => onSave(type, quantity)} className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors">Confirm</button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const ReceiptModal = ({ onClose, data, type }: { onClose: () => void, data: any, type: 'inward' | 'outward' }) => {
+  const printReceipt = () => {
+    window.print();
+  };
+
+  const isInward = type === 'inward';
+  const title = isInward ? 'Goods Receipt Note (GRN)' : 'Dispatch Receipt / Gate Pass';
+  const idLabel = isInward ? 'GRN No' : 'Order ID';
+  const idValue = isInward ? data.grnNo : data.dispatchOrderId;
+  const partyLabel = isInward ? 'Vendor' : 'Customer / Destination';
+  const partyValue = isInward ? data.vendorName : data.destination;
+
+  return (
+    <div className="fixed inset-0 bg-zinc-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden print:shadow-none print:rounded-none"
+      >
+        <div className="p-6 border-b border-zinc-100 flex justify-between items-center print:hidden">
+          <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Print Receipt</h3>
+          <div className="flex gap-2">
+            <button 
+              onClick={printReceipt}
+              className="px-4 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg flex items-center gap-2 hover:bg-zinc-800"
+            >
+              <Printer size={14} /> Print
+            </button>
+            <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
+          </div>
+        </div>
+
+        <div className="p-8 space-y-8 print:p-0">
+          {/* Header */}
+          <div className="flex justify-between items-start border-b-2 border-zinc-900 pb-6">
+            <div>
+              <h1 className="text-2xl font-black text-zinc-900">DCWAREHOUSE</h1>
+              <p className="text-xs text-zinc-500 mt-1">Industrial Logistics & Storage Solutions</p>
+              <p className="text-[10px] text-zinc-400 mt-0.5">Plot No. 45, Industrial Area, Phase II, Mumbai - 400001</p>
+            </div>
+            <div className="text-right flex flex-col items-end">
+              <h2 className="text-lg font-bold text-zinc-900 uppercase tracking-tighter">{title}</h2>
+              <p className="text-xs font-mono font-bold text-zinc-500 mt-1">{idLabel}: {idValue}</p>
+              <p className="text-[10px] text-zinc-400 mt-0.5 mb-2">Date: {data.dateTime || data.date || new Date().toLocaleString()}</p>
+              <div className="p-1 border border-zinc-200 rounded bg-white">
+                <QRCodeSVG value={idValue} size={60} level="M" />
+              </div>
+            </div>
+          </div>
+
+          {/* Details Grid */}
+          <div className="grid grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">{partyLabel}</p>
+                <p className="text-sm font-bold text-zinc-900">{partyValue}</p>
+              </div>
+              {isInward && (
+                <>
+                  <div>
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Vehicle Details</p>
+                    <p className="text-sm text-zinc-600">{data.vehicleNo || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">LR Number</p>
+                    <p className="text-sm text-zinc-600">{data.lrNumber || 'N/A'}</p>
+                  </div>
+                </>
+              )}
+              {!isInward && (
+                <>
+                  <div>
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Courier / Logistics</p>
+                    <p className="text-sm text-zinc-600">{data.courierName || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Tracking ID</p>
+                    <p className="text-sm text-zinc-600">{data.trackingNumber || 'N/A'}</p>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Warehouse Location</p>
+                <p className="text-sm text-zinc-600">{data.warehouse || 'Main Warehouse'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Status</p>
+                <p className="text-sm font-bold text-zinc-900 uppercase">{data.status}</p>
+              </div>
+              {data.driverName && (
+                <div>
+                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Driver Name</p>
+                  <p className="text-sm text-zinc-600">{data.driverName}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="border border-zinc-200 rounded-lg overflow-hidden">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="bg-zinc-50 border-b border-zinc-200">
+                  <th className="px-4 py-2 font-bold text-zinc-900">#</th>
+                  <th className="px-4 py-2 font-bold text-zinc-900">Item Description</th>
+                  <th className="px-4 py-2 font-bold text-zinc-900">Model #</th>
+                  <th className="px-4 py-2 font-bold text-zinc-900 text-right">Quantity</th>
+                  <th className="px-4 py-2 font-bold text-zinc-900">Unit</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {data.items?.map((item: any, idx: number) => (
+                  <tr key={idx}>
+                    <td className="px-4 py-2 text-zinc-500">{idx + 1}</td>
+                    <td className="px-4 py-2 font-medium text-zinc-900">
+                      {item.itemName}
+                      {item.shortDescription && <p className="text-[10px] text-zinc-400 font-normal">{item.shortDescription}</p>}
+                    </td>
+                    <td className="px-4 py-2 text-zinc-600 font-mono">{item.modelNumber || '-'}</td>
+                    <td className="px-4 py-2 text-right font-bold text-zinc-900">{item.quantity}</td>
+                    <td className="px-4 py-2 text-zinc-500 uppercase">{item.unitType || 'Units'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-zinc-50 border-t border-zinc-200">
+                  <td colSpan={3} className="px-4 py-3 text-right font-bold text-zinc-900 uppercase tracking-wider">Total Quantity</td>
+                  <td className="px-4 py-3 text-right font-black text-zinc-900 text-sm">
+                    {data.items?.reduce((sum: number, i: any) => sum + i.quantity, 0)}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Footer / Signatures */}
+          <div className="pt-12 grid grid-cols-2 gap-12">
+            <div className="text-center">
+              <div className="border-t border-zinc-300 pt-2">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase">Authorized Signatory</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="border-t border-zinc-300 pt-2">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase">Receiver's Signature</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-8 text-center border-t border-zinc-100">
+            <p className="text-[10px] text-zinc-400 italic">This is a computer-generated document and does not require a physical signature.</p>
           </div>
         </div>
       </motion.div>
@@ -4083,7 +4305,7 @@ const CustomerPortal = ({
 // --- Main App ---
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'dashboard' | 'contracts' | 'inventory' | 'inward' | 'outward' | 'reports' | 'invoices' | 'payments' | 'ledger' | 'settings' | 'reminders' | 'barcode' | 'warehouses' | 'sql'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'contracts' | 'inventory' | 'inward' | 'outward' | 'reports' | 'invoices' | 'payments' | 'ledger' | 'settings' | 'reminders' | 'qrcode' | 'warehouses' | 'sql'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [pricing, setPricing] = useState<PricingConfig[]>(MOCK_PRICING);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -4113,6 +4335,9 @@ export default function App() {
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [showStockAdjustmentModal, setShowStockAdjustmentModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [selectedReceiptData, setSelectedReceiptData] = useState<any>(null);
+  const [receiptType, setReceiptType] = useState<'inward' | 'outward'>('inward');
   
   // Edit States
   const [editingEntity, setEditingEntity] = useState<any>(null);
@@ -4334,6 +4559,7 @@ export default function App() {
             setSelectedInventoryItem(item);
             setShowStockAdjustmentModal(true);
           }}
+          setActiveView={setActiveView}
         />
       );
       case 'inward': return (
@@ -4346,7 +4572,11 @@ export default function App() {
           onEdit={(r) => { setEditingEntity(r); setShowGRNModal(true); }}
           onDelete={(id) => handleDelete('inward', id)}
           onView={(r) => setViewingEntity(r)}
-          onPrint={handlePrint}
+          onPrint={(r) => {
+            setSelectedReceiptData(r);
+            setReceiptType('inward');
+            setShowReceiptModal(true);
+          }}
           onExportExcel={() => handleExportExcel(inwardRecords, 'inward_records')}
           onExportPDF={handleExportPDF}
           onUpdateStatus={async (id, status) => {
@@ -4373,7 +4603,11 @@ export default function App() {
           onEdit={(r) => { setEditingEntity(r); setShowDispatchModal(true); }}
           onDelete={(id) => handleDelete('outward', id)}
           onView={(r) => setViewingEntity(r)}
-          onPrint={handlePrint}
+          onPrint={(r) => {
+            setSelectedReceiptData(r);
+            setReceiptType('outward');
+            setShowReceiptModal(true);
+          }}
           onExportExcel={() => handleExportExcel(outwardRecords, 'outward_records')}
           onExportPDF={handleExportPDF}
         />
@@ -4391,7 +4625,7 @@ export default function App() {
       case 'reminders': return <RemindersView invoices={invoices} contracts={contracts} onSendReminder={(id) => {
         setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, lastReminderSent: new Date().toISOString() } : inv));
       }} />;
-      case 'barcode': return <BarcodeView items={items} />;
+      case 'qrcode': return <QRCodeView items={items} />;
       case 'invoices': return <InvoicesView onOpenCreate={() => setShowInvoiceModal(true)} invoices={invoices} />;
       case 'payments': return <PaymentsView onOpenRecord={() => setShowPaymentModal(true)} payments={payments} />;
       case 'ledger': return <LedgerView ledger={ledger} />;
@@ -4477,7 +4711,7 @@ export default function App() {
           <div className="pt-4 pb-2">
             <p className="px-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Utilities</p>
           </div>
-          <SidebarItem icon={Barcode} label="Generate Barcode" active={activeView === 'barcode'} onClick={() => setActiveView('barcode')} />
+          <SidebarItem icon={QrCode} label="Generate QR Code" active={activeView === 'qrcode'} onClick={() => setActiveView('qrcode')} />
           <SidebarItem icon={Database} label="Backup/Restore" active={false} onClick={() => alert('Backup/Restore feature coming soon')} />
           <SidebarItem icon={FileUp} label="Import Items" active={false} onClick={() => alert('Import feature coming soon')} />
 
@@ -4767,6 +5001,17 @@ export default function App() {
             items={items}
             vendors={contracts}
             warehouses={warehouses}
+          />
+        )}
+
+        {showReceiptModal && selectedReceiptData && (
+          <ReceiptModal 
+            onClose={() => {
+              setShowReceiptModal(false);
+              setSelectedReceiptData(null);
+            }}
+            data={selectedReceiptData}
+            type={receiptType}
           />
         )}
 
