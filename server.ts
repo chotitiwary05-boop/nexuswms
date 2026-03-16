@@ -233,9 +233,13 @@ db.exec(`
     quantity INTEGER NOT NULL,
     weight REAL,
     volume REAL,
+    rack_id INTEGER,
+    shelf_id INTEGER,
     storage_location TEXT,
     FOREIGN KEY (inward_id) REFERENCES inward_goods(id),
-    FOREIGN KEY (item_id) REFERENCES items(id)
+    FOREIGN KEY (item_id) REFERENCES items(id),
+    FOREIGN KEY (rack_id) REFERENCES racks(id),
+    FOREIGN KEY (shelf_id) REFERENCES shelves(id)
   );
 
   CREATE TABLE IF NOT EXISTS outward_goods (

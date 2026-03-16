@@ -964,16 +964,22 @@ const InventoryView = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-4">
+      <div className="flex gap-8 border-b border-zinc-200 mb-6">
         <button 
           onClick={() => setTab('tracking')}
-          className={cn("px-4 py-2 text-xs font-bold rounded-lg transition-all", tab === 'tracking' ? "bg-zinc-900 text-white" : "bg-white text-zinc-500 border border-zinc-200")}
+          className={cn(
+            "pb-4 text-[10px] font-bold uppercase tracking-widest transition-all border-b-2", 
+            tab === 'tracking' ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-400 hover:text-zinc-600"
+          )}
         >
           Real-time Tracking
         </button>
         <button 
           onClick={() => setTab('master')}
-          className={cn("px-4 py-2 text-xs font-bold rounded-lg transition-all", tab === 'master' ? "bg-zinc-900 text-white" : "bg-white text-zinc-500 border border-zinc-200")}
+          className={cn(
+            "pb-4 text-[10px] font-bold uppercase tracking-widest transition-all border-b-2", 
+            tab === 'master' ? "border-zinc-900 text-zinc-900" : "border-transparent text-zinc-400 hover:text-zinc-600"
+          )}
         >
           Item Master
         </button>
@@ -2184,6 +2190,262 @@ const LedgerView = ({
   </Card>
 );
 
+const SqlSchemaView = () => {
+  const schema = `-- Core Infrastructure
+CREATE TABLE IF NOT EXISTS branches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  address TEXT,
+  total_area REAL,
+  capacity_pallets INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS zones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  branch_id INTEGER,
+  name TEXT NOT NULL,
+  type TEXT CHECK(type IN ('DRY', 'COLD', 'HAZARDOUS')),
+  FOREIGN KEY (branch_id) REFERENCES branches(id)
+);
+
+CREATE TABLE IF NOT EXISTS locations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  zone_id INTEGER,
+  name TEXT NOT NULL,
+  type TEXT CHECK(type IN ('RACK', 'FLOOR')),
+  total_capacity REAL,
+  occupied_capacity REAL DEFAULT 0,
+  FOREIGN KEY (zone_id) REFERENCES zones(id)
+);
+
+-- Vendor & Contract Management
+CREATE TABLE IF NOT EXISTS vendors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  company_name TEXT,
+  email TEXT,
+  phone TEXT,
+  gst_number TEXT,
+  address TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS contracts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor_id INTEGER,
+  branch_id INTEGER,
+  start_date DATE,
+  end_date DATE,
+  billing_cycle TEXT CHECK(billing_cycle IN ('DAILY', 'WEEKLY', 'MONTHLY')),
+  rate_per_sqft REAL,
+  security_deposit REAL,
+  status TEXT DEFAULT 'ACTIVE',
+  FOREIGN KEY (vendor_id) REFERENCES vendors(id),
+  FOREIGN KEY (branch_id) REFERENCES branches(id)
+);
+
+-- Inventory
+CREATE TABLE IF NOT EXISTS categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor_id INTEGER,
+  name TEXT NOT NULL,
+  sku TEXT UNIQUE NOT NULL,
+  description TEXT,
+  short_description TEXT,
+  model_number TEXT,
+  category_id INTEGER,
+  unit_type TEXT,
+  weight REAL,
+  volume REAL,
+  quantity INTEGER DEFAULT 0,
+  damaged_quantity INTEGER DEFAULT 0,
+  expired_quantity INTEGER DEFAULT 0,
+  missing_quantity INTEGER DEFAULT 0,
+  min_stock_level INTEGER DEFAULT 5,
+  location_id INTEGER,
+  price REAL,
+  gst_rate REAL DEFAULT 18.0,
+  mfg_date DATE,
+  expiry_date DATE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (vendor_id) REFERENCES vendors(id),
+  FOREIGN KEY (category_id) REFERENCES categories(id),
+  FOREIGN KEY (location_id) REFERENCES locations(id)
+);
+
+CREATE TABLE IF NOT EXISTS transactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INTEGER NOT NULL,
+  type TEXT CHECK(type IN ('IN', 'OUT', 'INTERNAL', 'DAMAGED', 'EXPIRED', 'MISSING', 'RETURN')) NOT NULL,
+  quantity INTEGER NOT NULL,
+  unit_price REAL,
+  gst_amount REAL,
+  total_amount REAL,
+  reference TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (item_id) REFERENCES items(id)
+);
+
+-- Billing & Accounting
+CREATE TABLE IF NOT EXISTS invoices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor_id INTEGER,
+  invoice_number TEXT UNIQUE NOT NULL,
+  date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  total_amount REAL DEFAULT 0,
+  paid_amount REAL DEFAULT 0,
+  status TEXT DEFAULT 'UNPAID' CHECK(status IN ('UNPAID', 'PARTIAL', 'PAID', 'OVERDUE', 'CANCELLED')),
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+);
+
+CREATE TABLE IF NOT EXISTS invoice_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  invoice_id INTEGER,
+  description TEXT NOT NULL,
+  amount REAL NOT NULL,
+  type TEXT CHECK(type IN ('SPACE_RENTAL', 'HANDLING', 'INWARD', 'OUTWARD', 'STORAGE', 'ADDITIONAL')),
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor_id INTEGER,
+  invoice_id INTEGER,
+  amount REAL NOT NULL,
+  date DATE NOT NULL,
+  method TEXT CHECK(method IN ('CASH', 'BANK', 'UPI', 'CHEQUE', 'OTHER')),
+  type TEXT CHECK(type IN ('FULL', 'PARTIAL', 'ADVANCE')),
+  reference TEXT,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (vendor_id) REFERENCES vendors(id),
+  FOREIGN KEY (invoice_id) REFERENCES invoices(id)
+);
+
+CREATE TABLE IF NOT EXISTS ledger (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  vendor_id INTEGER,
+  date DATE NOT NULL,
+  description TEXT,
+  reference TEXT,
+  debit REAL DEFAULT 0,
+  credit REAL DEFAULT 0,
+  balance REAL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+);
+
+CREATE TABLE IF NOT EXISTS inward_goods (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  grn_no TEXT UNIQUE NOT NULL,
+  vendor_id INTEGER NOT NULL,
+  warehouse TEXT NOT NULL,
+  date_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  status TEXT DEFAULT 'GRN',
+  lr_number TEXT,
+  courier_name TEXT,
+  courier_details TEXT,
+  tracking_number TEXT,
+  third_party_courier TEXT,
+  third_party_tracking TEXT,
+  FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+);
+
+CREATE TABLE IF NOT EXISTS inward_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  inward_id INTEGER NOT NULL,
+  item_id INTEGER NOT NULL,
+  quantity INTEGER NOT NULL,
+  weight REAL,
+  volume REAL,
+  rack_id INTEGER,
+  shelf_id INTEGER,
+  storage_location TEXT,
+  FOREIGN KEY (inward_id) REFERENCES inward_goods(id),
+  FOREIGN KEY (item_id) REFERENCES items(id),
+  FOREIGN KEY (rack_id) REFERENCES racks(id),
+  FOREIGN KEY (shelf_id) REFERENCES shelves(id)
+);
+
+CREATE TABLE IF NOT EXISTS outward_goods (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dispatch_order_id TEXT UNIQUE NOT NULL,
+  vendor_id INTEGER NOT NULL,
+  destination TEXT,
+  vehicle_details TEXT,
+  date_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  status TEXT DEFAULT 'Requested',
+  lr_number TEXT,
+  courier_name TEXT,
+  courier_details TEXT,
+  tracking_number TEXT,
+  third_party_courier TEXT,
+  third_party_tracking TEXT,
+  FOREIGN KEY (vendor_id) REFERENCES vendors(id)
+);
+
+CREATE TABLE IF NOT EXISTS outward_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  outward_id INTEGER NOT NULL,
+  item_id INTEGER NOT NULL,
+  quantity INTEGER NOT NULL,
+  weight REAL,
+  FOREIGN KEY (outward_id) REFERENCES outward_goods(id),
+  FOREIGN KEY (item_id) REFERENCES items(id)
+);`;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black italic tracking-tighter uppercase">SQL Database Schema</h2>
+          <p className="text-zinc-500 text-xs mt-1">Core database architecture for Nexus WMS</p>
+        </div>
+        <button 
+          onClick={() => {
+            const blob = new Blob([schema], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'nexus_wms_schema.sql';
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          className="px-4 py-2 bg-zinc-900 text-white text-[10px] font-bold rounded-lg uppercase tracking-wider flex items-center gap-2"
+        >
+          <Database size={14} /> Download SQL
+        </button>
+      </div>
+
+      <div className="bg-zinc-900 rounded-2xl p-6 overflow-hidden border border-zinc-800 shadow-2xl">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-3 h-3 rounded-full bg-rose-500" />
+          <div className="w-3 h-3 rounded-full bg-amber-500" />
+          <div className="w-3 h-3 rounded-full bg-emerald-500" />
+          <span className="ml-2 text-[10px] font-mono text-zinc-500 uppercase tracking-widest">nexus_wms_schema.sql</span>
+        </div>
+        <pre className="text-xs font-mono text-zinc-300 overflow-auto max-h-[600px] scrollbar-hide leading-relaxed">
+          {schema}
+        </pre>
+      </div>
+      
+      <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl">
+        <p className="text-[10px] text-zinc-500 font-medium">Developed by <span className="text-zinc-900 font-bold">Digital Communique Private limited</span></p>
+      </div>
+    </div>
+  );
+};
+
 const SettingsView = ({ 
   pricing, 
   onUpdatePricing, 
@@ -2946,7 +3208,7 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses, ra
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-4xl w-full overflow-hidden max-h-[90vh] flex flex-col">
-        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50 sticky top-0 z-10">
           <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">{initialData ? 'Edit GRN' : 'New Goods Receipt Note (GRN)'}</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
         </div>
@@ -3012,7 +3274,7 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses, ra
           <div className="p-4 border border-dashed border-zinc-200 rounded-xl space-y-4">
             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Add Items to GRN</p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-2">
+              <div className="md:col-span-1">
                 <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Item</label>
                 <select 
                   value={currentItem.itemId} 
@@ -3022,6 +3284,7 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses, ra
                       ...currentItem, 
                       itemId: e.target.value, 
                       itemName: i?.name || '',
+                      modelNumber: i?.modelNumber || '',
                       shortDescription: i?.shortDescription || ''
                     });
                   }} 
@@ -3036,6 +3299,16 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses, ra
                     <span className="text-[9px] font-bold bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-500 uppercase truncate max-w-[200px]">Desc: {currentItem.shortDescription || 'N/A'}</span>
                   </div>
                 )}
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Model #</label>
+                <input 
+                  type="text" 
+                  value={currentItem.modelNumber || ''} 
+                  onChange={e => setCurrentItem({...currentItem, modelNumber: e.target.value})} 
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" 
+                  placeholder="Model Number"
+                />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity ({items.find(i => i.id === currentItem.itemId)?.unitType || 'Units'})</label>
@@ -3500,13 +3773,13 @@ const CreateInvoiceModal = ({ onClose, taxes }: { onClose: () => void, taxes: Ta
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden"
+        className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden max-h-[90vh] flex flex-col"
       >
-        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+        <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50 sticky top-0 z-10">
           <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Create New Invoice</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
         </div>
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Vendor</label>
@@ -4221,11 +4494,8 @@ const LoginView = ({ onLogin, customers, inventory }: { onLogin: (user: User) =>
         </form>
 
         <div className="mt-8 pt-6 border-t border-zinc-100 text-center">
-          <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-widest">Default Credentials</p>
-          <div className="flex justify-center gap-4 mt-2 text-xs text-zinc-500">
-            <p><span className="font-bold text-zinc-900">Admin:</span> admin / admin</p>
-            <p><span className="font-bold text-zinc-900">Customer:</span> customer / 12345</p>
-          </div>
+          <p className="text-[10px] text-zinc-400 uppercase font-bold tracking-widest">Nexus WMS v1.0</p>
+          <p className="text-[10px] text-zinc-500 mt-2 font-medium">Developed by <span className="text-zinc-900 font-bold">Digital Communique Private limited</span></p>
         </div>
       </motion.div>
     </div>
@@ -4669,6 +4939,15 @@ const CustomerPortal = ({
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <footer className="bg-white border-t border-zinc-200 px-8 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Nexus WMS v1.0</p>
+          <span className="w-1 h-1 rounded-full bg-zinc-300" />
+          <p className="text-[10px] text-zinc-500 font-medium italic">Developed by Digital Communique Private limited</p>
+        </div>
+        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Customer Support: +91 1234567890</p>
+      </footer>
     </div>
   );
 };
@@ -4676,7 +4955,7 @@ const CustomerPortal = ({
 // --- Main App ---
 
 export default function App() {
-  const [activeView, setActiveView] = useState<'dashboard' | 'contracts' | 'inventory' | 'inward' | 'outward' | 'reports' | 'invoices' | 'payments' | 'ledger' | 'settings' | 'reminders' | 'qrcode' | 'warehouses' | 'sql'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'contracts' | 'inventory' | 'inward' | 'outward' | 'reports' | 'invoices' | 'payments' | 'ledger' | 'settings' | 'reminders' | 'qrcode' | 'warehouses' | 'sqlschema'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [pricing, setPricing] = useState<PricingConfig[]>(MOCK_PRICING);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -4788,7 +5067,11 @@ export default function App() {
 
         if (shelvesRes.ok) {
           const data = await shelvesRes.json();
-          setShelves(data.map((s: any) => ({ ...s, id: s.id.toString() })));
+          setShelves(data.map((s: any) => ({ 
+            ...s, 
+            id: s.id.toString(),
+            rack_id: s.rack_id?.toString()
+          })));
         }
 
         if (taxesRes.ok) {
@@ -5137,6 +5420,7 @@ export default function App() {
           onDeleteWarehouse={(id) => handleDelete('warehouse', id)}
         />
       );
+      case 'sqlschema': return <SqlSchemaView />;
       case 'settings': return (
         <SettingsView 
           pricing={pricing} 
@@ -5221,6 +5505,7 @@ export default function App() {
             <p className="px-4 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Utilities</p>
           </div>
           <SidebarItem icon={QrCode} label="Generate QR Code" active={activeView === 'qrcode'} onClick={() => setActiveView('qrcode')} />
+          <SidebarItem icon={Database} label="SQL Database Schema" active={activeView === 'sqlschema'} onClick={() => setActiveView('sqlschema')} />
           <SidebarItem icon={Database} label="Backup/Restore" active={false} onClick={() => alert('Backup/Restore feature coming soon')} />
           <SidebarItem icon={FileUp} label="Import Items" active={false} onClick={() => alert('Import feature coming soon')} />
 
@@ -5241,6 +5526,10 @@ export default function App() {
         </nav>
 
         <div className="p-4 border-t border-zinc-100">
+          <div className="mb-4 px-2">
+            <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">Nexus WMS v1.0</p>
+            <p className="text-[9px] text-zinc-500 mt-1 leading-tight">Developed by Digital Communique Private limited</p>
+          </div>
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="w-full p-2 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-50 rounded-lg transition-colors flex justify-center"
