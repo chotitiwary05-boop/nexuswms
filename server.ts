@@ -184,6 +184,32 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS racks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id INTEGER,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS shelves (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rack_id INTEGER,
+    name TEXT NOT NULL,
+    capacity REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (rack_id) REFERENCES racks(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS taxes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    rate REAL NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS inward_goods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     grn_no TEXT UNIQUE NOT NULL,
@@ -968,6 +994,98 @@ async function startServer() {
       res.json({ message: "Return processed successfully" });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Racks
+  app.get("/api/racks", (req, res) => {
+    try {
+      const racks = db.prepare("SELECT * FROM racks ORDER BY name ASC").all();
+      res.json(racks);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch racks" });
+    }
+  });
+
+  app.post("/api/racks", (req, res) => {
+    const { branch_id, name, description } = req.body;
+    try {
+      const info = db.prepare("INSERT INTO racks (branch_id, name, description) VALUES (?, ?, ?)").run(branch_id, name, description);
+      res.json({ id: info.lastInsertRowid, branch_id, name, description });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create rack" });
+    }
+  });
+
+  app.delete("/api/racks/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM racks WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete rack" });
+    }
+  });
+
+  // Shelves
+  app.get("/api/shelves", (req, res) => {
+    try {
+      const shelves = db.prepare(`
+        SELECT s.*, r.name as rack_name 
+        FROM shelves s 
+        JOIN racks r ON s.rack_id = r.id 
+        ORDER BY s.name ASC
+      `).all();
+      res.json(shelves);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch shelves" });
+    }
+  });
+
+  app.post("/api/shelves", (req, res) => {
+    const { rack_id, name, capacity } = req.body;
+    try {
+      const info = db.prepare("INSERT INTO shelves (rack_id, name, capacity) VALUES (?, ?, ?)").run(rack_id, name, capacity);
+      res.json({ id: info.lastInsertRowid, rack_id, name, capacity });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create shelf" });
+    }
+  });
+
+  app.delete("/api/shelves/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM shelves WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete shelf" });
+    }
+  });
+
+  // Taxes
+  app.get("/api/taxes", (req, res) => {
+    try {
+      const taxes = db.prepare("SELECT * FROM taxes ORDER BY rate ASC").all();
+      res.json(taxes);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch taxes" });
+    }
+  });
+
+  app.post("/api/taxes", (req, res) => {
+    const { name, rate, description } = req.body;
+    try {
+      const info = db.prepare("INSERT INTO taxes (name, rate, description) VALUES (?, ?, ?)").run(name, rate, description);
+      res.json({ id: info.lastInsertRowid, name, rate, description });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create tax" });
+    }
+  });
+
+  app.delete("/api/taxes/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM taxes WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete tax" });
     }
   });
 

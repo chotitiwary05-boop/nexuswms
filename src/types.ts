@@ -25,6 +25,7 @@ export interface ItemMaster {
   weight: number; // kg
   volume: number; // m3
   price?: number;
+  quantity?: number;
   modelNumber?: string;
   shortDescription?: string;
   mfgDate?: string;
@@ -37,6 +38,8 @@ export interface InwardItem {
   modelNumber?: string;
   shortDescription?: string;
   quantity: number;
+  rackId?: string;
+  shelfId?: string;
   weight: number;
   volume: number;
   storageLocation: string;
@@ -113,6 +116,9 @@ export interface InvoiceItem {
   id: string;
   description: string;
   amount: number;
+  taxId?: string;
+  taxRate?: number;
+  taxAmount?: number;
   type: 'SPACE_RENTAL' | 'HANDLING' | 'INWARD' | 'OUTWARD' | 'STORAGE' | 'ADDITIONAL';
 }
 
@@ -124,6 +130,7 @@ export interface Invoice {
   date: string;
   dueDate: string;
   totalAmount: number;
+  totalTaxAmount?: number;
   paidAmount: number;
   status: InvoiceStatus;
   notes?: string;
@@ -190,4 +197,26 @@ export interface Warehouse {
   manager?: string;
   contactNumber?: string;
   status: 'Active' | 'Inactive';
+}
+
+export interface Rack {
+  id: string;
+  branch_id?: string;
+  name: string;
+  description?: string;
+}
+
+export interface Shelf {
+  id: string;
+  rack_id: string;
+  rack_name?: string;
+  name: string;
+  capacity?: number;
+}
+
+export interface Tax {
+  id: string;
+  name: string;
+  rate: number;
+  description?: string;
 }

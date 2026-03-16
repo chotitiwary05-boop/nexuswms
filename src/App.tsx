@@ -73,11 +73,15 @@ import {
   PaymentCycle,
   Invoice,
   Payment,
+  InvoiceItem,
   LedgerEntry,
   PricingConfig,
   Customer,
   User,
-  Warehouse
+  Warehouse,
+  Rack,
+  Shelf,
+  Tax
 } from './types';
 
 // --- Mock Data ---
@@ -1862,13 +1866,15 @@ const QRCodeView = ({ items }: { items: ItemMaster[] }) => {
   const [selectedItem, setSelectedItem] = useState<ItemMaster | null>(null);
   const [header, setHeader] = useState('Nexus WMS');
   const [line2, setLine2] = useState('Premium Quality');
+  const [modelNumber, setModelNumber] = useState('');
   const [qty, setQty] = useState(1);
-  const [qrList, setQrList] = useState<{ item: ItemMaster, qty: number, header: string, line2: string }[]>([]);
+  const [qrList, setQrList] = useState<{ item: ItemMaster, qty: number, header: string, line2: string, modelNumber: string }[]>([]);
 
   const addToQrList = () => {
     if (selectedItem) {
-      setQrList([...qrList, { item: selectedItem, qty, header, line2 }]);
+      setQrList([...qrList, { item: selectedItem, qty, header, line2, modelNumber }]);
       setSelectedItem(null);
+      setModelNumber('');
       setQty(1);
     }
   };
@@ -1907,6 +1913,7 @@ const QRCodeView = ({ items }: { items: ItemMaster[] }) => {
                 onChange={(e) => {
                   const item = items.find(i => i.id === e.target.value);
                   setSelectedItem(item || null);
+                  if (item) setModelNumber(item.modelNumber || '');
                 }}
                 value={selectedItem?.id || ''}
               >
@@ -1915,6 +1922,16 @@ const QRCodeView = ({ items }: { items: ItemMaster[] }) => {
                   <option key={item.id} value={item.id}>{item.name} ({item.id})</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Model Number</label>
+              <input 
+                type="text" 
+                value={modelNumber} 
+                onChange={e => setModelNumber(e.target.value)}
+                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" 
+                placeholder="Fetched from item master..."
+              />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity</label>
@@ -1942,6 +1959,7 @@ const QRCodeView = ({ items }: { items: ItemMaster[] }) => {
               </div>
               <div className="text-center">
                 <p className="text-sm font-bold text-zinc-900">{selectedItem.name}</p>
+                {modelNumber && <p className="text-[10px] font-bold text-zinc-600">Model: {modelNumber}</p>}
                 <p className="text-sm font-bold text-indigo-600">Sale Price: ₹{selectedItem.price || '0'}</p>
                 <p className="text-[10px] text-zinc-500 uppercase font-bold">{line2}</p>
               </div>
@@ -1987,7 +2005,10 @@ const QRCodeView = ({ items }: { items: ItemMaster[] }) => {
             <tbody className="divide-y divide-zinc-50">
               {qrList.map((entry, idx) => (
                 <tr key={idx} className="hover:bg-zinc-50 transition-colors">
-                  <td className="py-4 text-sm font-bold text-zinc-900">{entry.item.name}</td>
+                  <td className="py-4">
+                    <p className="text-sm font-bold text-zinc-900">{entry.item.name}</p>
+                    {entry.modelNumber && <p className="text-[10px] text-zinc-500 font-bold uppercase">Model: {entry.modelNumber}</p>}
+                  </td>
                   <td className="py-4 text-sm font-mono text-zinc-600">{entry.item.id}</td>
                   <td className="py-4 text-sm font-black text-zinc-900">{entry.qty.toString().padStart(2, '0')}</td>
                   <td className="py-4 text-sm font-black text-zinc-900">₹{(entry.item.price || 0).toLocaleString()}</td>
@@ -2015,7 +2036,21 @@ const QRCodeView = ({ items }: { items: ItemMaster[] }) => {
   );
 };
 
-const InvoicesView = ({ onOpenCreate, invoices }: { onOpenCreate: () => void, invoices: Invoice[] }) => (
+const InvoicesView = ({ 
+  onOpenCreate, 
+  invoices,
+  onView,
+  onDelete,
+  onExportExcel,
+  onExportPDF
+}: { 
+  onOpenCreate: () => void, 
+  invoices: Invoice[],
+  onView: (inv: Invoice) => void,
+  onDelete: (id: string) => void,
+  onExportExcel: (inv: Invoice) => void,
+  onExportPDF: (inv: Invoice) => void
+}) => (
   <Card title="Invoices" subtitle="Manage vendor billing and space rental invoices" action={<button onClick={onOpenCreate} className="px-4 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg flex items-center gap-2 hover:bg-zinc-800 transition-colors"><Plus size={14} /> Create Invoice</button>}>
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -2043,10 +2078,11 @@ const InvoicesView = ({ onOpenCreate, invoices }: { onOpenCreate: () => void, in
               </td>
               <td className="py-4 text-right">
                 <ActionButtons 
-                  onView={() => {}}
+                  onView={() => onView(inv)}
+                  onDelete={() => onDelete(inv.id)}
                   onPrint={() => window.print()}
-                  onExportExcel={() => {}}
-                  onExportPDF={() => {}}
+                  onExportExcel={() => onExportExcel(inv)}
+                  onExportPDF={() => onExportPDF(inv)}
                 />
               </td>
             </tr>
@@ -2057,7 +2093,19 @@ const InvoicesView = ({ onOpenCreate, invoices }: { onOpenCreate: () => void, in
   </Card>
 );
 
-const PaymentsView = ({ onOpenRecord, payments }: { onOpenRecord: () => void, payments: Payment[] }) => (
+const PaymentsView = ({ 
+  onOpenRecord, 
+  payments,
+  onView,
+  onDelete,
+  onPrint
+}: { 
+  onOpenRecord: () => void, 
+  payments: Payment[],
+  onView: (pay: Payment) => void,
+  onDelete: (id: string) => void,
+  onPrint: () => void
+}) => (
   <Card title="Payments" subtitle="Record and track vendor payments" action={<button onClick={onOpenRecord} className="px-4 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg flex items-center gap-2 hover:bg-zinc-800 transition-colors"><Plus size={14} /> Record Payment</button>}>
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -2079,8 +2127,9 @@ const PaymentsView = ({ onOpenRecord, payments }: { onOpenRecord: () => void, pa
               <td className="py-4 text-sm font-black text-zinc-900">₹{pay.amount.toLocaleString()}</td>
               <td className="py-4 text-right">
                 <ActionButtons 
-                  onView={() => {}}
-                  onPrint={() => window.print()}
+                  onView={() => onView(pay)}
+                  onDelete={() => onDelete(pay.id)}
+                  onPrint={onPrint}
                 />
               </td>
             </tr>
@@ -2091,7 +2140,15 @@ const PaymentsView = ({ onOpenRecord, payments }: { onOpenRecord: () => void, pa
   </Card>
 );
 
-const LedgerView = ({ ledger }: { ledger: LedgerEntry[] }) => (
+const LedgerView = ({ 
+  ledger,
+  onView,
+  onPrint
+}: { 
+  ledger: LedgerEntry[],
+  onView: (entry: LedgerEntry) => void,
+  onPrint: () => void
+}) => (
   <Card title="Vendor Ledger" subtitle="Detailed transaction history for vendors">
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -2115,8 +2172,8 @@ const LedgerView = ({ ledger }: { ledger: LedgerEntry[] }) => (
               <td className="py-4 text-sm font-black text-zinc-900">₹{entry.balance.toLocaleString()}</td>
               <td className="py-4 text-right">
                 <ActionButtons 
-                  onView={() => {}}
-                  onPrint={() => window.print()}
+                  onView={() => onView(entry)}
+                  onPrint={onPrint}
                 />
               </td>
             </tr>
@@ -2133,17 +2190,38 @@ const SettingsView = ({
   customers, 
   onAddCustomer, 
   onToggleCustomerAccess,
-  onDeleteCustomer
+  onDeleteCustomer,
+  racks,
+  shelves,
+  taxes,
+  onAddRack,
+  onDeleteRack,
+  onAddShelf,
+  onDeleteShelf,
+  onAddTax,
+  onDeleteTax
 }: { 
   pricing: PricingConfig[], 
   onUpdatePricing: (newPricing: PricingConfig[]) => void,
   customers: Customer[],
   onAddCustomer: (c: Customer) => void,
   onToggleCustomerAccess: (id: string) => void,
-  onDeleteCustomer: (id: string) => void
+  onDeleteCustomer: (id: string) => void,
+  racks: Rack[],
+  shelves: Shelf[],
+  taxes: Tax[],
+  onAddRack: (r: Partial<Rack>) => void,
+  onDeleteRack: (id: string) => void,
+  onAddShelf: (s: Partial<Shelf>) => void,
+  onDeleteShelf: (id: string) => void,
+  onAddTax: (t: Partial<Tax>) => void,
+  onDeleteTax: (id: string) => void
 }) => {
   const [localPricing, setLocalPricing] = useState(pricing);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [showAddRack, setShowAddRack] = useState(false);
+  const [showAddShelf, setShowAddShelf] = useState(false);
+  const [showAddTax, setShowAddTax] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -2183,6 +2261,168 @@ const SettingsView = ({
           </button>
         </div>
       </Card>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card 
+          title="Rack Management" 
+          subtitle="Define warehouse racks"
+          action={<button onClick={() => setShowAddRack(true)} className="p-1.5 bg-zinc-900 text-white rounded hover:bg-zinc-800 transition-colors"><Plus size={14} /></button>}
+        >
+          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+            {racks.map(r => (
+              <div key={r.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
+                <div>
+                  <p className="text-sm font-bold text-zinc-900">{r.name}</p>
+                  <p className="text-[10px] text-zinc-500">{r.description || 'No description'}</p>
+                </div>
+                <button onClick={() => onDeleteRack(r.id)} className="p-1.5 text-zinc-400 hover:text-rose-600 transition-colors"><X size={14} /></button>
+              </div>
+            ))}
+            {racks.length === 0 && <p className="text-center py-4 text-xs text-zinc-400 italic">No racks defined</p>}
+          </div>
+        </Card>
+
+        <Card 
+          title="Shelf Management" 
+          subtitle="Define shelves within racks"
+          action={<button onClick={() => setShowAddShelf(true)} className="p-1.5 bg-zinc-900 text-white rounded hover:bg-zinc-800 transition-colors"><Plus size={14} /></button>}
+        >
+          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+            {shelves.map(s => (
+              <div key={s.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
+                <div>
+                  <p className="text-sm font-bold text-zinc-900">{s.name}</p>
+                  <p className="text-[10px] text-zinc-500">Rack: {s.rack_name} | Cap: {s.capacity || '-'}</p>
+                </div>
+                <button onClick={() => onDeleteShelf(s.id)} className="p-1.5 text-zinc-400 hover:text-rose-600 transition-colors"><X size={14} /></button>
+              </div>
+            ))}
+            {shelves.length === 0 && <p className="text-center py-4 text-xs text-zinc-400 italic">No shelves defined</p>}
+          </div>
+        </Card>
+
+        <Card 
+          title="Tax (GST) Management" 
+          subtitle="Configure GST rates"
+          action={<button onClick={() => setShowAddTax(true)} className="p-1.5 bg-zinc-900 text-white rounded hover:bg-zinc-800 transition-colors"><Plus size={14} /></button>}
+        >
+          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+            {taxes.map(t => (
+              <div key={t.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-100">
+                <div>
+                  <p className="text-sm font-bold text-zinc-900">{t.name}</p>
+                  <p className="text-[10px] text-zinc-500">Rate: {t.rate}% | {t.description || 'No description'}</p>
+                </div>
+                <button onClick={() => onDeleteTax(t.id)} className="p-1.5 text-zinc-400 hover:text-rose-600 transition-colors"><X size={14} /></button>
+              </div>
+            ))}
+            {taxes.length === 0 && <p className="text-center py-4 text-xs text-zinc-400 italic">No taxes defined</p>}
+          </div>
+        </Card>
+      </div>
+
+      {showAddRack && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+              <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Add New Rack</h3>
+              <button onClick={() => setShowAddRack(false)} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              onAddRack({
+                name: formData.get('name') as string,
+                description: formData.get('description') as string
+              });
+              setShowAddRack(false);
+            }} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Rack Name</label>
+                <input name="name" required className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-900" placeholder="e.g. Rack A" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Description</label>
+                <input name="description" className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-900" placeholder="Optional description" />
+              </div>
+              <button type="submit" className="w-full py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all">Create Rack</button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {showAddShelf && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+              <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Add New Shelf</h3>
+              <button onClick={() => setShowAddShelf(false)} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              onAddShelf({
+                rack_id: formData.get('rack_id') as string,
+                name: formData.get('name') as string,
+                capacity: Number(formData.get('capacity'))
+              });
+              setShowAddShelf(false);
+            }} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Select Rack</label>
+                <select name="rack_id" required className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-900">
+                  <option value="">Choose a rack...</option>
+                  {racks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Shelf Name</label>
+                <input name="name" required className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-900" placeholder="e.g. Shelf 1" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Capacity (Optional)</label>
+                <input name="capacity" type="number" className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-900" placeholder="Max weight/volume" />
+              </div>
+              <button type="submit" className="w-full py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all">Create Shelf</button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {showAddTax && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="px-6 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+              <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Add New Tax Rate</h3>
+              <button onClick={() => setShowAddTax(false)} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              onAddTax({
+                name: formData.get('name') as string,
+                rate: Number(formData.get('rate')),
+                description: formData.get('description') as string
+              });
+              setShowAddTax(false);
+            }} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Tax Name</label>
+                <input name="name" required className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-900" placeholder="e.g. GST 18%" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Tax Rate (%)</label>
+                <input name="rate" type="number" step="0.01" required className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-900" placeholder="e.g. 18" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Description</label>
+                <input name="description" className="w-full px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-zinc-900" placeholder="Optional details" />
+              </div>
+              <button type="submit" className="w-full py-3 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 transition-all">Create Tax</button>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       <Card 
         title="Customer Access Management" 
@@ -2352,6 +2592,7 @@ const ItemModal = ({ onClose, onSave, initialData }: { onClose: () => void, onSa
     unitType: 'Piece',
     weight: 0,
     volume: 0,
+    quantity: 0,
     modelNumber: '',
     shortDescription: '',
     mfgDate: '',
@@ -2400,7 +2641,7 @@ const ItemModal = ({ onClose, onSave, initialData }: { onClose: () => void, onSa
               <input type="date" value={formData.expiryDate} onChange={e => setFormData({...formData, expiryDate: e.target.value})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Unit Type</label>
               <select value={formData.unitType} onChange={e => setFormData({...formData, unitType: e.target.value as any})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none">
@@ -2408,6 +2649,10 @@ const ItemModal = ({ onClose, onSave, initialData }: { onClose: () => void, onSa
                 <option value="Carton">Carton</option>
                 <option value="Pallet">Pallet</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity</label>
+              <input type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Weight (kg)</label>
@@ -2632,7 +2877,7 @@ const ReceiptModal = ({ onClose, data, type }: { onClose: () => void, data: any,
   );
 };
 
-const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses }: { onClose: () => void, onSave: (r: InwardGoods) => void, initialData?: InwardGoods, items: ItemMaster[], vendors: VendorContract[], warehouses: Warehouse[] }) => {
+const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses, racks, shelves }: { onClose: () => void, onSave: (r: InwardGoods) => void, initialData?: InwardGoods, items: ItemMaster[], vendors: VendorContract[], warehouses: Warehouse[], racks: Rack[], shelves: Shelf[] }) => {
   const [formData, setFormData] = useState<Partial<InwardGoods>>(initialData || {
     grnNo: `GRN${Math.floor(Math.random() * 100000).toString().padStart(5, '0')}`,
     vendorId: vendors[0]?.vendorId || '',
@@ -2655,20 +2900,27 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses }: 
     quantity: 0,
     weight: 0,
     volume: 0,
-    storageLocation: 'Rack A1',
+    rackId: '',
+    shelfId: '',
+    storageLocation: '',
     shortDescription: items[0]?.shortDescription || ''
   });
 
   const addItem = () => {
     if (!currentItem.itemId || currentItem.quantity! <= 0) return;
     const item = items.find(i => i.id === currentItem.itemId);
+    const rack = racks.find(r => r.id === currentItem.rackId);
+    const shelf = shelves.find(s => s.id === currentItem.shelfId);
+    const storageLocation = `${rack?.name || ''} - ${shelf?.name || ''}`;
+
     setFormData({
       ...formData,
       items: [...(formData.items || []), {
         ...currentItem as InwardItem,
         itemName: item?.name || '',
         modelNumber: item?.modelNumber,
-        shortDescription: item?.shortDescription
+        shortDescription: item?.shortDescription,
+        storageLocation: storageLocation
       }]
     });
     setCurrentItem({
@@ -2677,7 +2929,9 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses }: 
       quantity: 0,
       weight: 0,
       volume: 0,
-      storageLocation: 'Rack A1',
+      rackId: '',
+      shelfId: '',
+      storageLocation: '',
       shortDescription: items[0]?.shortDescription || ''
     });
   };
@@ -2788,8 +3042,26 @@ const GRNModal = ({ onClose, onSave, initialData, items, vendors, warehouses }: 
                 <input type="number" value={currentItem.quantity} onChange={e => setCurrentItem({...currentItem, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Location</label>
-                <input type="text" value={currentItem.storageLocation} onChange={e => setCurrentItem({...currentItem, storageLocation: e.target.value})} className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none" />
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Rack</label>
+                <select 
+                  value={currentItem.rackId} 
+                  onChange={e => setCurrentItem({...currentItem, rackId: e.target.value})} 
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none"
+                >
+                  <option value="">Select Rack</option>
+                  {racks.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Shelf</label>
+                <select 
+                  value={currentItem.shelfId} 
+                  onChange={e => setCurrentItem({...currentItem, shelfId: e.target.value})} 
+                  className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none"
+                >
+                  <option value="">Select Shelf</option>
+                  {shelves.filter(s => s.rack_id === currentItem.rackId).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
               </div>
             </div>
             <div className="flex justify-end">
@@ -3212,14 +3484,16 @@ const ViewModal = ({ entity, onClose }: { entity: any, onClose: () => void }) =>
   );
 };
 
-const CreateInvoiceModal = ({ onClose }: { onClose: () => void }) => {
-  const [items, setItems] = useState([
-    { id: '1', description: 'Storage Charges', amount: 20000, type: 'STORAGE' },
-    { id: '2', description: 'Handling Charges', amount: 2000, type: 'HANDLING' },
-    { id: '3', description: 'Inward Charges', amount: 500, type: 'INWARD' },
+const CreateInvoiceModal = ({ onClose, taxes }: { onClose: () => void, taxes: Tax[] }) => {
+  const [items, setItems] = useState<InvoiceItem[]>([
+    { id: '1', description: 'Storage Charges', amount: 20000, type: 'STORAGE', taxRate: 0, taxAmount: 0 },
+    { id: '2', description: 'Handling Charges', amount: 2000, type: 'HANDLING', taxRate: 0, taxAmount: 0 },
+    { id: '3', description: 'Inward Charges', amount: 500, type: 'INWARD', taxRate: 0, taxAmount: 0 },
   ]);
 
-  const total = items.reduce((sum, item) => sum + item.amount, 0);
+  const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
+  const totalTax = items.reduce((sum, item) => sum + (item.taxAmount || 0), 0);
+  const total = subtotal + totalTax;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -3250,47 +3524,84 @@ const CreateInvoiceModal = ({ onClose }: { onClose: () => void }) => {
           <div className="space-y-3">
             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Billing Components</p>
             {items.map((item, idx) => (
-              <div key={item.id} className="flex gap-3 items-center">
-                <input 
-                  className="flex-1 px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
-                  value={item.description}
-                  onChange={(e) => {
-                    const next = [...items];
-                    next[idx].description = e.target.value;
-                    setItems(next);
-                  }}
-                />
-                <div className="relative w-32">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">₹</span>
+              <div key={item.id} className="space-y-2 p-3 bg-zinc-50 rounded-xl border border-zinc-100">
+                <div className="flex gap-3 items-center">
                   <input 
-                    type="number"
-                    className="w-full pl-7 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none font-bold"
-                    value={item.amount}
+                    className="flex-1 px-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none"
+                    placeholder="Description"
+                    value={item.description}
                     onChange={(e) => {
                       const next = [...items];
-                      next[idx].amount = Number(e.target.value);
+                      next[idx].description = e.target.value;
                       setItems(next);
                     }}
                   />
+                  <div className="relative w-32">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">₹</span>
+                    <input 
+                      type="number"
+                      className="w-full pl-7 pr-3 py-2 bg-white border border-zinc-200 rounded-lg text-sm outline-none font-bold"
+                      value={item.amount}
+                      onChange={(e) => {
+                        const next = [...items];
+                        const amount = Number(e.target.value);
+                        next[idx].amount = amount;
+                        next[idx].taxAmount = (amount * (next[idx].taxRate || 0)) / 100;
+                        setItems(next);
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 items-center">
+                  <div className="flex-1">
+                    <select 
+                      className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-lg text-xs outline-none"
+                      value={item.taxId || ''}
+                      onChange={(e) => {
+                        const next = [...items];
+                        const tax = taxes.find(t => t.id === e.target.value);
+                        next[idx].taxId = e.target.value;
+                        next[idx].taxRate = tax?.rate || 0;
+                        next[idx].taxAmount = (next[idx].amount * (tax?.rate || 0)) / 100;
+                        setItems(next);
+                      }}
+                    >
+                      <option value="">No Tax</option>
+                      {taxes.map(t => <option key={t.id} value={t.id}>{t.name} ({t.rate}%)</option>)}
+                    </select>
+                  </div>
+                  <div className="w-32 text-right px-3 py-2 text-xs text-zinc-500">
+                    Tax: ₹{(item.taxAmount || 0).toLocaleString()}
+                  </div>
                 </div>
               </div>
             ))}
             <button 
-              onClick={() => setItems([...items, { id: Math.random().toString(), description: '', amount: 0, type: 'ADDITIONAL' }])}
+              onClick={() => setItems([...items, { id: Math.random().toString(), description: '', amount: 0, type: 'ADDITIONAL', taxRate: 0, taxAmount: 0 }])}
               className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 uppercase flex items-center gap-1"
             >
               <Plus size={12} /> Add Component
             </button>
           </div>
 
-          <div className="pt-4 border-t border-zinc-100 flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-zinc-400 uppercase">Total Amount</p>
-              <p className="text-2xl font-black text-zinc-900">₹{total.toLocaleString()}</p>
+          <div className="pt-4 border-t border-zinc-100 space-y-2">
+            <div className="flex justify-between text-xs text-zinc-500">
+              <span>Subtotal</span>
+              <span>₹{subtotal.toLocaleString()}</span>
             </div>
-            <button className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors">
-              Generate Invoice
-            </button>
+            <div className="flex justify-between text-xs text-zinc-500">
+              <span>Total Tax</span>
+              <span>₹{totalTax.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center pt-2">
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase">Total Amount</p>
+                <p className="text-2xl font-black text-zinc-900">₹{total.toLocaleString()}</p>
+              </div>
+              <button className="px-6 py-2 bg-zinc-900 text-white text-xs font-bold rounded-lg hover:bg-zinc-800 transition-colors">
+                Generate Invoice
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -3491,11 +3802,33 @@ const WarehousesView = ({
 const ReturnModal = ({ onClose, onSave, items, vendors, warehouses }: { onClose: () => void, onSave: (r: any) => void, items: ItemMaster[], vendors: VendorContract[], warehouses: Warehouse[] }) => {
   const [formData, setFormData] = useState({
     itemId: items[0]?.id || '',
+    modelNumber: '',
     quantity: 0,
     reason: '',
     vendorId: vendors[0]?.vendorId || '',
-    warehouse: warehouses[0]?.name || ''
+    warehouse: warehouses[0]?.name || '',
+    photo: null as string | null
   });
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, photo: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const selectedItem = items.find(i => i.id === formData.itemId);
+
+  // Auto-fill model number if item changes
+  useEffect(() => {
+    if (selectedItem?.modelNumber) {
+      setFormData(prev => ({ ...prev, modelNumber: selectedItem.modelNumber || '' }));
+    }
+  }, [formData.itemId, selectedItem]);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -3504,7 +3837,7 @@ const ReturnModal = ({ onClose, onSave, items, vendors, warehouses }: { onClose:
           <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider italic">Return Damaged Product</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900"><X size={20} /></button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           <div>
             <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Item to Return</label>
             <select 
@@ -3515,10 +3848,17 @@ const ReturnModal = ({ onClose, onSave, items, vendors, warehouses }: { onClose:
               {items.map(i => <option key={i.id} value={i.id}>{i.name} ({i.sku})</option>)}
             </select>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity ({items.find(i => i.id === formData.itemId)?.unitType || 'Units'})</label>
-              <input type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Model Number</label>
+              <input 
+                type="text" 
+                value={formData.modelNumber} 
+                onChange={e => setFormData({...formData, modelNumber: e.target.value})} 
+                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
+                placeholder="Enter model number"
+              />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Warehouse</label>
@@ -3531,25 +3871,56 @@ const ReturnModal = ({ onClose, onSave, items, vendors, warehouses }: { onClose:
               </select>
             </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Vendor</label>
-            <select 
-              value={formData.vendorId} 
-              onChange={e => setFormData({...formData, vendorId: e.target.value})} 
-              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
-            >
-              {vendors.map(v => <option key={v.vendorId} value={v.vendorId}>{v.vendorName}</option>)}
-            </select>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Quantity ({selectedItem?.unitType || 'Units'})</label>
+              <input type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Vendor</label>
+              <select 
+                value={formData.vendorId} 
+                onChange={e => setFormData({...formData, vendorId: e.target.value})} 
+                className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none"
+              >
+                {vendors.map(v => <option key={v.vendorId} value={v.vendorId}>{v.vendorName}</option>)}
+              </select>
+            </div>
           </div>
+
           <div>
             <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Reason for Return</label>
             <textarea 
               value={formData.reason} 
               onChange={e => setFormData({...formData, reason: e.target.value})} 
-              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none h-24 resize-none"
+              className="w-full px-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none h-20 resize-none"
               placeholder="Describe the damage..."
             />
           </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Damage Photo</label>
+            <div className="mt-1 flex items-center gap-4">
+              <label className="flex-1 flex flex-col items-center justify-center px-4 py-4 bg-zinc-50 border-2 border-dashed border-zinc-200 rounded-xl cursor-pointer hover:bg-zinc-100 transition-colors">
+                <Camera className="text-zinc-400 mb-2" size={24} />
+                <span className="text-[10px] font-bold text-zinc-500 uppercase">Click to upload photo</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+              </label>
+              {formData.photo && (
+                <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-zinc-200 shrink-0">
+                  <img src={formData.photo} alt="Damage" className="w-full h-full object-cover" />
+                  <button 
+                    onClick={() => setFormData({ ...formData, photo: null })}
+                    className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="pt-4 flex justify-end gap-3">
             <button onClick={onClose} className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-900">Cancel</button>
             <button onClick={() => onSave(formData)} className="px-6 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors">Process Return</button>
@@ -4323,6 +4694,9 @@ export default function App() {
   const [invoices, setInvoices] = useState<Invoice[]>(MOCK_INVOICES);
   const [payments, setPayments] = useState<Payment[]>(MOCK_PAYMENTS);
   const [ledger, setLedger] = useState<LedgerEntry[]>(MOCK_LEDGER);
+  const [racks, setRacks] = useState<Rack[]>([]);
+  const [shelves, setShelves] = useState<Shelf[]>([]);
+  const [taxes, setTaxes] = useState<Tax[]>([]);
 
   // Modal States
   const [showContractModal, setShowContractModal] = useState(false);
@@ -4347,11 +4721,14 @@ export default function App() {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [itemsRes, inventoryRes, inwardRes, outwardRes] = await Promise.all([
+        const [itemsRes, inventoryRes, inwardRes, outwardRes, racksRes, shelvesRes, taxesRes] = await Promise.all([
           fetch('/api/items'),
           fetch('/api/inventory'),
           fetch('/api/inward'),
-          fetch('/api/outward')
+          fetch('/api/outward'),
+          fetch('/api/racks'),
+          fetch('/api/shelves'),
+          fetch('/api/taxes')
         ]);
 
         if (itemsRes.ok) {
@@ -4403,12 +4780,109 @@ export default function App() {
           const data = await outwardRes.json();
           setOutwardRecords(data);
         }
+
+        if (racksRes.ok) {
+          const data = await racksRes.json();
+          setRacks(data.map((r: any) => ({ ...r, id: r.id.toString() })));
+        }
+
+        if (shelvesRes.ok) {
+          const data = await shelvesRes.json();
+          setShelves(data.map((s: any) => ({ ...s, id: s.id.toString() })));
+        }
+
+        if (taxesRes.ok) {
+          const data = await taxesRes.json();
+          setTaxes(data.map((t: any) => ({ ...t, id: t.id.toString() })));
+        }
       } catch (err) {
-        console.error("Database fetch failed, falling back to mock data:", err);
+        console.error("Database fetch failed:", err);
       }
     };
     fetchInitialData();
   }, []);
+
+  const handleAddRack = async (rackData: Partial<Rack>) => {
+    try {
+      const res = await fetch('/api/racks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...rackData, branch_id: 1 })
+      });
+      if (res.ok) {
+        const newRack = await res.json();
+        setRacks([...racks, { ...newRack, id: newRack.id.toString() }]);
+      }
+    } catch (error) {
+      console.error("Failed to add rack:", error);
+    }
+  };
+
+  const handleDeleteRack = async (id: string) => {
+    try {
+      const res = await fetch(`/api/racks/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setRacks(racks.filter(r => r.id !== id));
+      }
+    } catch (error) {
+      console.error("Failed to delete rack:", error);
+    }
+  };
+
+  const handleAddShelf = async (shelfData: Partial<Shelf>) => {
+    try {
+      const res = await fetch('/api/shelves', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shelfData)
+      });
+      if (res.ok) {
+        const newShelf = await res.json();
+        const rack = racks.find(r => r.id === newShelf.rack_id.toString());
+        setShelves([...shelves, { ...newShelf, id: newShelf.id.toString(), rack_name: rack?.name }]);
+      }
+    } catch (error) {
+      console.error("Failed to add shelf:", error);
+    }
+  };
+
+  const handleDeleteShelf = async (id: string) => {
+    try {
+      const res = await fetch(`/api/shelves/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setShelves(shelves.filter(s => s.id !== id));
+      }
+    } catch (error) {
+      console.error("Failed to delete shelf:", error);
+    }
+  };
+
+  const handleAddTax = async (taxData: Partial<Tax>) => {
+    try {
+      const res = await fetch('/api/taxes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(taxData)
+      });
+      if (res.ok) {
+        const newTax = await res.json();
+        setTaxes([...taxes, { ...newTax, id: newTax.id.toString() }]);
+      }
+    } catch (error) {
+      console.error("Failed to add tax:", error);
+    }
+  };
+
+  const handleDeleteTax = async (id: string) => {
+    try {
+      const res = await fetch(`/api/taxes/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setTaxes(taxes.filter(t => t.id !== id));
+      }
+    } catch (error) {
+      console.error("Failed to delete tax:", error);
+    }
+  };
 
   const handleDelete = (type: string, id: string) => {
     if (!confirm('Are you sure you want to delete this record?')) return;
@@ -4419,6 +4893,7 @@ export default function App() {
       case 'inward': setInwardRecords(prev => prev.filter(r => r.grnNo !== id)); break;
       case 'outward': setOutwardRecords(prev => prev.filter(r => r.dispatchOrderId !== id)); break;
       case 'invoice': setInvoices(prev => prev.filter(i => i.id !== id)); break;
+      case 'payment': setPayments(prev => prev.filter(p => p.id !== id)); break;
       case 'warehouse': setWarehouses(prev => prev.filter(w => w.id !== id)); break;
     }
   };
@@ -4427,10 +4902,13 @@ export default function App() {
     window.print();
   };
 
-  const handleExportExcel = (data: any[], filename: string) => {
+  const handleExportExcel = (data: any | any[], filename: string) => {
+    const arrayData = Array.isArray(data) ? data : [data];
+    if (arrayData.length === 0) return;
+    
     const csvContent = "data:text/csv;charset=utf-8," 
-      + Object.keys(data[0]).join(",") + "\n"
-      + data.map(row => Object.values(row).join(",")).join("\n");
+      + Object.keys(arrayData[0]).join(",") + "\n"
+      + arrayData.map(row => Object.values(row).map(v => typeof v === 'object' ? JSON.stringify(v).replace(/,/g, ';') : v).join(",")).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -4440,8 +4918,7 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  const handleExportPDF = () => {
-    alert("PDF Exporting... (In a real app, this would use jspdf or a server-side generator)");
+  const handleExportPDF = (data: any, filename: string) => {
     window.print();
   };
 
@@ -4541,7 +5018,7 @@ export default function App() {
           onView={(c) => setViewingEntity(c)}
           onPrint={handlePrint}
           onExportExcel={() => handleExportExcel(contracts, 'contracts')}
-          onExportPDF={handleExportPDF}
+          onExportPDF={() => handleExportPDF(contracts, 'contracts')}
         />
       );
       case 'inventory': return (
@@ -4554,7 +5031,7 @@ export default function App() {
           onViewItem={(i) => setViewingEntity(i)}
           onPrint={handlePrint}
           onExportExcel={() => handleExportExcel(items, 'inventory')}
-          onExportPDF={handleExportPDF}
+          onExportPDF={() => handleExportPDF(items, 'inventory')}
           onStockAdjustment={(item) => {
             setSelectedInventoryItem(item);
             setShowStockAdjustmentModal(true);
@@ -4578,7 +5055,7 @@ export default function App() {
             setShowReceiptModal(true);
           }}
           onExportExcel={() => handleExportExcel(inwardRecords, 'inward_records')}
-          onExportPDF={handleExportPDF}
+          onExportPDF={() => handleExportPDF(inwardRecords, 'inward_records')}
           onUpdateStatus={async (id, status) => {
             try {
               const response = await fetch(`/api/inward/${id}/status`, {
@@ -4609,7 +5086,7 @@ export default function App() {
             setShowReceiptModal(true);
           }}
           onExportExcel={() => handleExportExcel(outwardRecords, 'outward_records')}
-          onExportPDF={handleExportPDF}
+          onExportPDF={() => handleExportPDF(outwardRecords, 'outward_records')}
         />
       );
       case 'reports': return (
@@ -4626,9 +5103,32 @@ export default function App() {
         setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, lastReminderSent: new Date().toISOString() } : inv));
       }} />;
       case 'qrcode': return <QRCodeView items={items} />;
-      case 'invoices': return <InvoicesView onOpenCreate={() => setShowInvoiceModal(true)} invoices={invoices} />;
-      case 'payments': return <PaymentsView onOpenRecord={() => setShowPaymentModal(true)} payments={payments} />;
-      case 'ledger': return <LedgerView ledger={ledger} />;
+      case 'invoices': return (
+        <InvoicesView 
+          onOpenCreate={() => setShowInvoiceModal(true)} 
+          invoices={invoices} 
+          onView={(inv) => { setViewingEntity(inv); }}
+          onDelete={(id) => handleDelete('invoice', id)}
+          onExportExcel={(inv) => handleExportExcel(inv, `invoice_${inv.invoiceNumber}`)}
+          onExportPDF={(inv) => handleExportPDF(inv, `invoice_${inv.invoiceNumber}`)}
+        />
+      );
+      case 'payments': return (
+        <PaymentsView 
+          onOpenRecord={() => setShowPaymentModal(true)} 
+          payments={payments} 
+          onView={(pay) => { setViewingEntity(pay); }}
+          onDelete={(id) => handleDelete('payment', id)}
+          onPrint={() => window.print()}
+        />
+      );
+      case 'ledger': return (
+        <LedgerView 
+          ledger={ledger} 
+          onView={(entry) => setViewingEntity(entry)}
+          onPrint={() => window.print()}
+        />
+      );
       case 'warehouses': return (
         <WarehousesView 
           warehouses={warehouses}
@@ -4645,6 +5145,15 @@ export default function App() {
           onAddCustomer={(c) => setCustomers([...customers, c])}
           onToggleCustomerAccess={(id) => setCustomers(prev => prev.map(c => c.id === id ? { ...c, accessDeniedByAdmin: !c.accessDeniedByAdmin } : c))}
           onDeleteCustomer={(id) => setCustomers(prev => prev.filter(c => c.id !== id))}
+          racks={racks}
+          onAddRack={handleAddRack}
+          onDeleteRack={handleDeleteRack}
+          shelves={shelves}
+          onAddShelf={handleAddShelf}
+          onDeleteShelf={handleDeleteShelf}
+          taxes={taxes}
+          onAddTax={handleAddTax}
+          onDeleteTax={handleDeleteTax}
         />
       );
       default: return <DashboardView contracts={contracts} inventory={inventory} inward={inwardRecords} outward={outwardRecords} />;
@@ -4805,7 +5314,7 @@ export default function App() {
           </AnimatePresence>
         </div>
 
-        {showInvoiceModal && <CreateInvoiceModal onClose={() => setShowInvoiceModal(false)} />}
+        {showInvoiceModal && <CreateInvoiceModal onClose={() => setShowInvoiceModal(false)} taxes={taxes} />}
         {showPaymentModal && <RecordPaymentModal onClose={() => setShowPaymentModal(false)} />}
         
         {showContractModal && (
@@ -4913,6 +5422,8 @@ export default function App() {
             items={items}
             vendors={contracts}
             warehouses={warehouses}
+            racks={racks}
+            shelves={shelves}
           />
         )}
 
